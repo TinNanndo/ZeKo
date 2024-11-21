@@ -1,16 +1,25 @@
+/* eslint-disable no-restricted-globals */
+
 // Add basic service worker setup
 
-this.addEventListener('install', (event) => {
+import { precacheAndRoute } from 'workbox-precaching';
+
+// Ensure self.__WB_MANIFEST is correctly referenced
+precacheAndRoute(self.__WB_MANIFEST || []);
+
+self.addEventListener('install', (event) => {
   console.log('Service Worker installing.');
   // Add a call to skipWaiting here if needed
 });
 
-this.addEventListener('activate', (event) => {
+self.addEventListener('activate', (event) => {
   console.log('Service Worker activating.');
   // Add a call to claim clients here if needed
 });
 
-this.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event) => {
   console.log('Fetching:', event.request.url);
   // Add fetch event handling here if needed
 });
+
+/* eslint-enable no-restricted-globals */

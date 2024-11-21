@@ -4,7 +4,6 @@ function App() {
   const [stepCount, setStepCount] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [lastStepTime, setLastStepTime] = useState(0);
   const [distance, setDistance] = useState(0); // Distance in meters
   const [updateLog] = useState(["Initial setup completed on " + new Date().toLocaleString()]);
 
@@ -13,25 +12,20 @@ function App() {
 
   const handleMotionEvent = useCallback(
     (event) => {
-      const { rotationRate } = event;
-      if (rotationRate) {
+      const { acceleration } = event;
+      if (acceleration) {
         const magnitude = Math.sqrt(
-          rotationRate.alpha ** 2 +
-          rotationRate.beta ** 2 +
-          rotationRate.gamma ** 2
+          acceleration.x ** 2 + acceleration.y ** 2 + acceleration.z ** 2
         );
         const threshold = 15; // Adjust threshold for better motion detection
-        const now = Date.now();
-        const minStepInterval = 400; // Minimum interval between steps (ms)
 
-        if (magnitude > threshold && now - lastStepTime > minStepInterval) {
-          setStepCount((prevCount) => prevCount + 1);
-          setLastStepTime(now);
+        if (magnitude > threshold) {
+          setStepCount((prev) => prev + 1);
         }
       }
     },
-    [lastStepTime]
-  );
+      []
+    );
 
   useEffect(() => {
     // Update the distance whenever the step count changes

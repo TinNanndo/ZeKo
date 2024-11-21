@@ -5,16 +5,10 @@ module.exports = {
   ],
   theme: {
     extend: {
-      animation: {
-        pop: 'pop 0.3s ease-in-out',
-      },
-      keyframes: {
-        pop: {
-          '0%': { transform: 'scale(1)' },
-          '50%': { transform: 'scale(1.2)' },
-          '100%': { transform: 'scale(1)' },
-        },
-      },
+      colors: {
+        cdarkgreen: '#1E3123',
+        cgreen: '#2E4834'
+      }
     },
   },
   plugins: [],

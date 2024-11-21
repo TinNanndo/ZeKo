@@ -6,6 +6,8 @@ function App() {
   const [permissionGranted, setPermissionGranted] = useState(false);
 
   useEffect(() => {
+    const savedSteps = parseInt(localStorage.getItem('stepCount'), 10) || 0;
+    setStepCount(savedSteps);
     // Request motion permissions on component mount
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
       DeviceMotionEvent.requestPermission()
@@ -29,7 +31,8 @@ function App() {
       stopTracking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    localStorage.setItem('stepCount', stepCount);
+  }, [stepCount]);
 
   const startTracking = () => {
     if (!isTracking) {
@@ -48,14 +51,12 @@ function App() {
   const handleMotionEvent = (event) => {
     const { acceleration } = event;
     if (acceleration) {
-      // Simple step detection logic (refine as needed)
-      const threshold = 1.5; // Adjust threshold for sensitivity
-      if (
-        Math.abs(acceleration.x) > threshold ||
-        Math.abs(acceleration.y) > threshold ||
-        Math.abs(acceleration.z) > threshold
-      ) {
-        setStepCount(prevCount => prevCount + 1);
+      const magnitude = Math.sqrt(
+        acceleration.x ** 2 + acceleration.y ** 2 + acceleration.z ** 2
+      );
+      const threshold = 1.5; // Adjust this value based on testing
+      if (magnitude > threshold) {
+        setStepCount((prevCount) => prevCount + 1);
       }
     }
   };
@@ -67,9 +68,7 @@ function App() {
         {permissionGranted ? (
           <>
             <div
-              className={`text-4xl sm:text-5xl md:text-6xl font-extrabold text-white transition-transform duration-300 ${
-                isTracking ? 'animate-ping' : ''
-              }`}
+              className={`text-4xl sm:text-5xl md:text-6xl font-extrabold text-white transition-transform duration-300`}
             >
               {stepCount}
             </div>

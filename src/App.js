@@ -2,13 +2,32 @@ import React, { useEffect, useState, useCallback } from 'react';
 
 function App() {
   const [stepCount, setStepCount] = useState(0);
+  const [distance, setDistance] = useState(0); // Distance in meters
+  const [updateLog, setUpdateLog] = useState(["Initial setup completed on " + new Date().toLocaleString()]);
+  const [location, setLocation] = useState(null); // User's current location
+  const [prevLocation, setPrevLocation] = useState(null); // User's previous location
   const [isTracking, setIsTracking] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [distance, setDistance] = useState(0); // Distance in meters
-  const [updateLog] = useState(["Initial setup completed on " + new Date().toLocaleString()]);
 
   // Average step length (in meters), adjusted for an average adult
   const averageStepLength = 0.78; // Approx. 78 cm
+  const threshold = 13; // Threshold for motion detection
+
+  // Function to calculate distance between two GPS coordinates using Haversine formula
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Radius of the Earth in meters
+    const φ1 = lat1 * (Math.PI / 180);
+    const φ2 = lat2 * (Math.PI / 180);
+    const Δφ = (lat2 - lat1) * (Math.PI / 180);
+    const Δλ = (lon2 - lon1) * (Math.PI / 180);
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+  };
 
   const handleMotionEvent = useCallback(
     (event) => {
@@ -17,15 +36,14 @@ function App() {
         const magnitude = Math.sqrt(
           acceleration.x ** 2 + acceleration.y ** 2 + acceleration.z ** 2
         );
-        const threshold = 15; // Adjust threshold for better motion detection
 
         if (magnitude > threshold) {
           setStepCount((prev) => prev + 1);
         }
       }
     },
-      []
-    );
+    [threshold]
+  );
 
   useEffect(() => {
     // Update the distance whenever the step count changes
@@ -47,9 +65,6 @@ function App() {
   }, [isTracking, handleMotionEvent]);
 
   useEffect(() => {
-    const savedSteps = parseInt(localStorage.getItem('stepCount'), 10) || 0;
-    setStepCount(savedSteps);
-
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
       DeviceMotionEvent.requestPermission()
         .then((permissionState) => {
@@ -68,8 +83,42 @@ function App() {
   }, [startTracking, stopTracking]);
 
   useEffect(() => {
-    localStorage.setItem('stepCount', stepCount);
-  }, [stepCount]);
+    let watchId;
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log('Current position:', { latitude, longitude });
+          if (prevLocation) {
+            const distanceTraveled = calculateDistance(
+              prevLocation.latitude,
+              prevLocation.longitude,
+              latitude,
+              longitude
+            );
+            console.log('Distance traveled:', distanceTraveled);
+            setDistance((prevDistance) => prevDistance + distanceTraveled);
+          }
+          setPrevLocation({ latitude, longitude });
+          setLocation({ latitude, longitude });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    return () => {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [prevLocation]);
 
   const handleNotificationClick = () => {
     alert(`Update Log:\n${updateLog.join('\n')}`);

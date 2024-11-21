@@ -9,17 +9,34 @@ precacheAndRoute(self.__WB_MANIFEST || []);
 
 self.addEventListener('install', (event) => {
   console.log('Service Worker installing.');
-  // Add a call to skipWaiting here if needed
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   console.log('Service Worker activating.');
-  // Add a call to claim clients here if needed
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== 'your-cache-name') {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
 });
 
 self.addEventListener('fetch', (event) => {
-  console.log('Fetching:', event.request.url);
-  // Add fetch event handling here if needed
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
 });
 
-/* eslint-enable no-restricted-globals */
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});

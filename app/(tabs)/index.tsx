@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Text, View } from 'react-native';
+import { Text, View, Alert } from 'react-native';
 import { Pedometer } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
@@ -22,6 +22,7 @@ TaskManager.defineTask(BACKGROUND_STEP_COUNT_TASK, async () => {
     }
     return BackgroundFetchResult.NewData;
   } catch (error) {
+    console.error('Background task error:', error);
     return BackgroundFetchResult.Failed;
   }
 });
@@ -43,10 +44,28 @@ export default function Index() {
   const [isPedometerAvailable, setIsPedometerAvailable] = useState('checking');
   const [pastStepCount, setPastStepCount] = useState(0);
   const [currentStepCount, setCurrentStepCount] = useState(0);
+  const [isSimulating, setIsSimulating] = useState(true); // Add a state for simulation mode
+
+  const requestPermissions = async () => {
+    const { status } = await Pedometer.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission Required',
+        'Permission to access motion data is required to count steps. Please enable it in your device settings.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
+  };
 
   const subscribe = async () => {
+    const permissionGranted = await requestPermissions();
+    if (!permissionGranted) return;
+
     const isAvailable = await Pedometer.isAvailableAsync();
     setIsPedometerAvailable(String(isAvailable));
+    console.log('Pedometer available:', isAvailable);
 
     if (isAvailable) {
       const end = new Date();
@@ -58,9 +77,18 @@ export default function Index() {
         setPastStepCount(pastStepCountResult.steps);
       }
 
-      return Pedometer.watchStepCount(result => {
-        setCurrentStepCount(result.steps);
-      });
+      if (isSimulating) {
+        // Simulate step counting
+        let simulatedSteps = 0;
+        setInterval(() => {
+          simulatedSteps += Math.floor(Math.random() * 10); // Simulate random steps
+          setCurrentStepCount(simulatedSteps);
+        }, 1000); // Update every second
+      } else {
+        return Pedometer.watchStepCount(result => {
+          setCurrentStepCount(result.steps);
+        });
+      }
     }
   };
 
@@ -84,7 +112,6 @@ export default function Index() {
           <View className="mt-6">
             <Text className='text-center text-3xl sm:text-4xl md:text-5xl font-light text-white mb-4'>/10,000</Text>
           </View>
-
         </View>
       </View>
     </View>

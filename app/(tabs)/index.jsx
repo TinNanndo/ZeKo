@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Text, View, Alert } from 'react-native';
+import { Text, View, Alert, PermissionsAndroid, Platform } from 'react-native';
 import { Pedometer } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
@@ -40,6 +40,26 @@ const registerBackgroundTask = async () => {
   }
 };
 
+const requestActivityPermission = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION,
+      );
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        console.log('Activity recognition permission granted');
+      } else {
+        Alert.alert('Permission Denied', 'Permission to access activity recognition was denied');
+        return false;
+      }
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  }
+  return true;
+};
+
 export default function Index() {
   const [isPedometerAvailable, setIsPedometerAvailable] = useState('checking');
   const [pastStepCount, setPastStepCount] = useState(0);
@@ -47,14 +67,19 @@ export default function Index() {
   const [isSimulating, setIsSimulating] = useState(true); // Add a state for simulation mode
 
   const requestPermissions = async () => {
-    const { status } = await Pedometer.requestPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert(
-        'Permission Required',
-        'Permission to access motion data is required to count steps. Please enable it in your device settings.',
-        [{ text: 'OK' }]
-      );
-      return false;
+    if (Platform.OS === 'ios') {
+      const { status } = await Pedometer.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Permission to access motion data is required to count steps. Please enable it in your device settings.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    } else if (Platform.OS === 'android') {
+      const activityPermissionGranted = await requestActivityPermission();
+      if (!activityPermissionGranted) return false;
     }
     return true;
   };

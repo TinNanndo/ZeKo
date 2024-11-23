@@ -1,5 +1,5 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
     "paths": {
@@ -9,10 +9,17 @@
     }
   },
   "include": [
+    "**/*.js",
+    "**/*.jsx",
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.js",
     "expo-env.d.js",
-    "nativewind-env.d.js"
-, "app/(tabs)/index.jsx", "app/(tabs)/_layout.jsx", "app/_layout.jsx", "app/+not-found.jsx"  ]
+    "nativewind-env.d.js",
+    "app/(tabs)/index.jsx",
+    "app/(tabs)/_layout.jsx",
+    "app/_layout.jsx",
+    "app/+not-found.jsx",
+    "nativewind-env.d.ts",
+  ]
 }

@@ -1,144 +1,180 @@
-import { useState, useEffect } from 'react';
-import { Text, View, Alert, PermissionsAndroid, Platform } from 'react-native';
-import { Pedometer } from 'expo-sensors';
+import React, { useState, useEffect } from 'react';
+import { Text, View, TouchableOpacity } from 'react-native';
+import { Accelerometer, Gyroscope } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
-import { BackgroundFetchResult } from 'expo-background-fetch';
+import '../../assets/global.css'
 
-import '../../assets/global.css';
+const STEP_COUNTER_TASK = 'STEP_COUNTER_TASK';
+const STEP_GOAL = 10000; // Default step goal
 
-const BACKGROUND_STEP_COUNT_TASK = 'BACKGROUND_STEP_COUNT_TASK';
-
-TaskManager.defineTask(BACKGROUND_STEP_COUNT_TASK, async () => {
-  try {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 1);
-
-    const pastStepCountResult = await Pedometer.getStepCountAsync(start, end);
-    if (pastStepCountResult) {
-      // Save the step count to storage or state management
-      console.log('Steps in the last 24 hours:', pastStepCountResult.steps);
-    }
-    return BackgroundFetchResult.NewData;
-  } catch (error) {
-    console.error('Background task error:', error);
-    return BackgroundFetchResult.Failed;
+TaskManager.defineTask(STEP_COUNTER_TASK, ({ data, error }) => {
+  if (error) {
+    console.error(error);
+    return;
+  }
+  if (data) {
+    const { steps } = data;
+    console.log('Background steps:', steps);
   }
 });
 
-const registerBackgroundTask = async () => {
-  try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_STEP_COUNT_TASK, {
-      minimumInterval: 15 * 60, // 15 minutes
+export default function Index() {
+  const [{ x, y, z }, setData] = useState({ x: 0, y: 0, z: 0 });
+  const [gyroData, setGyroData] = useState({ x: 0, y: 0, z: 0 });
+  const [subscription, setSubscription] = useState(null);
+  const [gyroSubscription, setGyroSubscription] = useState(null);
+  const [stepCount, setStepCount] = useState(0);
+  const [lastAcceleration, setLastAcceleration] = useState({ x: 0, y: 0, z: 0 });
+  const [lastPeakTime, setLastPeakTime] = useState(0);
+
+  const _subscribe = () => {
+    setSubscription(
+      Accelerometer.addListener(acceleration => {
+        setData(acceleration);
+        detectStep(acceleration, gyroData);
+      })
+    );
+    setGyroSubscription(
+      Gyroscope.addListener(gyro => {
+        setGyroData(gyro);
+      })
+    );
+    Accelerometer.setUpdateInterval(100); // Set update interval to 100ms
+    Gyroscope.setUpdateInterval(100); // Set update interval to 100ms
+  };
+
+  const _unsubscribe = () => {
+    subscription && subscription.remove();
+    gyroSubscription && gyroSubscription.remove();
+    setSubscription(null);
+    setGyroSubscription(null);
+  };
+
+  const detectStep = (acceleration, gyroData) => {
+    const alpha = 0.2; // Adjusted filter strength for smoothing
+    const filteredAcceleration = {
+      x: alpha * lastAcceleration.x + (1 - alpha) * acceleration.x,
+      y: alpha * lastAcceleration.y + (1 - alpha) * acceleration.y,
+      z: alpha * lastAcceleration.z + (1 - alpha) * acceleration.z,
+    };
+
+    const deltaX = Math.abs(filteredAcceleration.x - lastAcceleration.x);
+    const deltaY = Math.abs(filteredAcceleration.y - lastAcceleration.y);
+    const deltaZ = Math.abs(filteredAcceleration.z - lastAcceleration.z);
+
+    const magnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+
+    const currentTime = Date.now();
+    const timeSinceLastPeak = currentTime - lastPeakTime;
+
+    // Free fall detection (magnitude close to zero)
+    if (magnitude < 0.2) {
+      console.log('Free fall detected, ignoring...');
+      return;
+    }
+
+    // Impact detection (sudden large change in acceleration)
+    if (magnitude > 3.0) {
+      console.log('Impact detected, ignoring...');
+      return;
+    }
+
+    // Gyroscope data to detect rotational movements
+    const gyroMagnitude = Math.sqrt(gyroData.x * gyroData.x + gyroData.y * gyroData.y + gyroData.z * gyroData.z);
+    if (gyroMagnitude > 1.0) {
+      console.log('Rotational movement detected, ignoring...');
+      return;
+    }
+
+    // Shaking detection (rapid changes in acceleration)
+    if (deltaX > 1.5 || deltaY > 1.5 || deltaZ > 1.5) {
+      console.log('Shaking detected, ignoring...');
+      return;
+    }
+
+    // Adjusted threshold and time interval
+    if (magnitude > 1.2 && timeSinceLastPeak > 300) {
+      setStepCount(prevStepCount => {
+        const newStepCount = prevStepCount + 1;
+        console.log('Step Count (Accelerometer):', newStepCount); // Log step count to terminal
+        return newStepCount;
+      });
+      setLastPeakTime(currentTime);
+    }
+
+    setLastAcceleration(filteredAcceleration);
+  };
+
+  const resetSteps = () => {
+    setStepCount(0);
+    console.log('Step Count reset to 0'); // Log reset action to terminal
+  };
+
+  const startBackgroundTask = async () => {
+    await BackgroundFetch.registerTaskAsync(STEP_COUNTER_TASK, {
+      minimumInterval: 60, // Run every minute
       stopOnTerminate: false,
       startOnBoot: true,
     });
     console.log('Background task registered');
-  } catch (error) {
-    console.error('Failed to register background task', error);
-  }
-};
-
-const requestActivityPermission = async () => {
-  if (Platform.OS === 'android') {
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION,
-      );
-      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        console.log('Activity recognition permission granted');
-      } else {
-        Alert.alert('Permission Denied', 'Permission to access activity recognition was denied');
-        return false;
-      }
-    } catch (err) {
-      console.warn(err);
-      return false;
-    }
-  }
-  return true;
-};
-
-export default function Index() {
-  const [isPedometerAvailable, setIsPedometerAvailable] = useState('checking');
-  const [pastStepCount, setPastStepCount] = useState(0);
-  const [currentStepCount, setCurrentStepCount] = useState(0);
-  const [isSimulating, setIsSimulating] = useState(true); // Add a state for simulation mode
-
-  const requestPermissions = async () => {
-    if (Platform.OS === 'ios') {
-      const { status } = await Pedometer.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Permission to access motion data is required to count steps. Please enable it in your device settings.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-    } else if (Platform.OS === 'android') {
-      const activityPermissionGranted = await requestActivityPermission();
-      if (!activityPermissionGranted) return false;
-    }
-    return true;
-  };
-
-  const subscribe = async () => {
-    const permissionGranted = await requestPermissions();
-    if (!permissionGranted) return;
-
-    const isAvailable = await Pedometer.isAvailableAsync();
-    setIsPedometerAvailable(String(isAvailable));
-    console.log('Pedometer available:', isAvailable);
-
-    if (isAvailable) {
-      const end = new Date();
-      const start = new Date();
-      start.setDate(end.getDate() - 1);
-
-      const pastStepCountResult = await Pedometer.getStepCountAsync(start, end);
-      if (pastStepCountResult) {
-        setPastStepCount(pastStepCountResult.steps);
-      }
-
-      if (isSimulating) {
-        // Simulate step counting
-        let simulatedSteps = 0;
-        setInterval(() => {
-          simulatedSteps += Math.floor(Math.random() * 10); // Simulate random steps
-          setCurrentStepCount(simulatedSteps);
-        }, 1000); // Update every second
-      } else {
-        return Pedometer.watchStepCount(result => {
-          setCurrentStepCount(result.steps);
-        });
-      }
-    }
   };
 
   useEffect(() => {
-    subscribe().then(subscription => {
-      return () => subscription && subscription.remove();
-    });
-    registerBackgroundTask();
+    _subscribe();
+    startBackgroundTask();
+    return () => {
+      _unsubscribe();
+    };
   }, []);
 
   return (
-    <View className='bg-[#2E4834]'>
-      <Text className='text-white text-lg'>Pedometer.isAvailableAsync(): {isPedometerAvailable}</Text>
+    <View className="bg-[#2E4834] min-h-screen flex flex-col p-5 space-y-6">
+  <View className="flex items-center justify-between">
+    <Text className="text-white text-xl">Hello, Tin!</Text>
+    <Text className="text-white text-lg font-bold">1950</Text>
+  </View>
 
-      <View className='min-h-screen flex flex-col items-center justify-center p-4 space-y-8'>
-        <View className='bg-[#1E3123] rounded-2xl p-5 backdrop-filter backdrop-blur-lg shadow-lg'>
-          <Text className='text-center text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4'>Step Counter</Text>
-          <Text className='text-center text-4xl sm:text-5xl md:text-6xl font-extrabold text-white'>{currentStepCount}</Text>
-          <Text className="text-center text-white text-md sm:text-lg mt-2">Steps Taken</Text>
+  <Text className="text-white text-3xl font-bold">Welcome back</Text>
 
-          <View className="mt-6">
-            <Text className='text-center text-3xl sm:text-4xl md:text-5xl font-light text-white mb-4'>/10,000</Text>
-          </View>
-        </View>
-      </View>
+  {/* Kartica za korake */}
+  <View className="bg-[#1E3123] rounded-xl p-5 my-5 shadow-lg flex flex-row justify-between">
+    <View>
+      <Text className="text-white text-2xl">Steps</Text>
+      <Text className="text-white text-lg">{((stepCount / STEP_GOAL) * 100).toFixed(1)}%</Text>
+      
     </View>
+
+    <View>
+      <Text className="text-white text-4xl font-bold">{stepCount}</Text>
+      <Text className="text-white">/{STEP_GOAL}</Text>
+    </View>
+  </View>
+
+  {/* Druge kartice */}
+  <View className="flex flex-row justify-between mb-5">
+    <View className="bg-[#1E3123] rounded-xl p-5 flex-1 mr-2">
+      <Text className="text-white text-xl">Calories</Text>
+      <Text className="text-white text-3xl font-bold">150 cal</Text>
+    </View>
+    <View className="bg-[#1E3123] rounded-xl p-5 flex-1 ml-2">
+      <Text className="text-white text-xl">Distance</Text>
+      <Text className="text-white text-3xl font-bold">7.4 km</Text>
+    </View>
+  </View>
+
+  {/* Progres cvijeta */}
+  <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg">
+    <Text className="text-white text-xl">Flower progress</Text>
+    <View className="bg-white h-2 rounded-full mt-2">
+      <View
+        style={{ width: `${(stepCount / 25000) * 100}%` }}
+        className="bg-[#2E4834] h-full rounded-full"
+      />
+    </View>
+    <Text className="text-white text-lg mt-2">25,000 km</Text>
+  </View>
+</View>
+
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, TouchableOpacity } from 'react-native';
+import { Text, View, TouchableOpacity, Button } from 'react-native';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
@@ -164,7 +164,7 @@ export default function Index() {
   </View>
 
   {/* Progres cvijeta */}
-  <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg">
+  <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg mb-5">
     <Text className="text-white text-xl">Flower progress</Text>
     <View className="bg-white h-2 rounded-full mt-2">
       <View
@@ -174,6 +174,10 @@ export default function Index() {
     </View>
     <Text className="text-white text-lg mt-2">25,000 km</Text>
   </View>
+
+  <TouchableOpacity className=' bg-[#1E3123] rounded-xl shadow-lg p-5' onPress={resetSteps}>
+    <Text className='text-white text-lg mt-2 text-center'>Restart</Text>
+  </TouchableOpacity>
 </View>
 
   );

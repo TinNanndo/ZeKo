@@ -4,9 +4,11 @@ import { Accelerometer, Gyroscope } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import '../../assets/global.css'
+import { useNavigation } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STEP_COUNTER_TASK = 'STEP_COUNTER_TASK';
-const STEP_GOAL = 10000; // Default step goal
+const STEP = 0.75;
 
 TaskManager.defineTask(STEP_COUNTER_TASK, ({ data, error }) => {
   if (error) {
@@ -24,9 +26,53 @@ export default function Index() {
   const [gyroData, setGyroData] = useState({ x: 0, y: 0, z: 0 });
   const [subscription, setSubscription] = useState(null);
   const [gyroSubscription, setGyroSubscription] = useState(null);
-  const [stepCount, setStepCount] = useState(0);
+  const [stepCount, setStepCount, stepDistance] = useState(0);
   const [lastAcceleration, setLastAcceleration] = useState({ x: 0, y: 0, z: 0 });
   const [lastPeakTime, setLastPeakTime] = useState(0);
+  const navigation = useNavigation();
+  const [userName, setUserName] = useState('');
+  const [stepGoal, setStepGoal] = useState(10000); // Default step goal
+  const [weight, setWeight] = useState(70); // Default weight in kg
+  const [caloriesBurned, setCaloriesBurned] = useState(0);
+
+  useEffect(() => {
+    const checkUserSettings = async () => {
+      const name = await AsyncStorage.getItem('userName');
+      const storedStepGoal = await AsyncStorage.getItem('stepGoal');
+      const storedWeight = await AsyncStorage.getItem('weight');
+      if (!name || !storedStepGoal || !storedWeight) {
+        navigation.navigate('login');
+      } else {
+        setUserName(name);
+        setStepGoal(parseInt(storedStepGoal, 10)); // Set step goal from storage
+        setWeight(parseFloat(storedWeight)); // Set weight from storage
+      }
+    };
+
+    checkUserSettings();
+    _subscribe();
+    startBackgroundTask();
+    return () => {
+      _unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const caloriesPerStep = calculateCaloriesPerStep(weight);
+    setCaloriesBurned(stepCount * caloriesPerStep);
+  }, [stepCount, weight]);
+
+  const calculateCaloriesPerStep = (weight) => {
+    // Average calories burned per step for different weights
+    // This is a simplified calculation and can be adjusted
+    const caloriesPerKgPerStep = 0.0005; // Example value
+    return weight * caloriesPerKgPerStep;
+  };
+
+  const clearDataAndLogout = async () => {
+    await AsyncStorage.clear();
+    navigation.navigate('login');
+  };
 
   const _subscribe = () => {
     setSubscription(
@@ -107,7 +153,7 @@ export default function Index() {
   };
 
   const resetSteps = () => {
-    setStepCount(0);
+    setStepCount(1400);
     console.log('Step Count reset to 0'); // Log reset action to terminal
   };
 
@@ -120,65 +166,61 @@ export default function Index() {
     console.log('Background task registered');
   };
 
-  useEffect(() => {
-    _subscribe();
-    startBackgroundTask();
-    return () => {
-      _unsubscribe();
-    };
-  }, []);
-
   return (
     <View className="bg-[#2E4834] min-h-screen flex flex-col p-5 space-y-6">
-  <View className="flex items-center justify-between">
-    <Text className="text-white text-xl">Hello, Tin!</Text>
-    <Text className="text-white text-lg font-bold">1950</Text>
-  </View>
+      <View className="flex items-center justify-between">
+        <Text className="text-white text-xl">Hello, {userName}!</Text>
+        <Text className="text-white text-lg font-bold">1950</Text>
+      </View>
 
-  <Text className="text-white text-3xl font-bold">Welcome back</Text>
+      <Text className="text-white text-3xl font-bold">Welcome back</Text>
 
-  {/* Kartica za korake */}
-  <View className="bg-[#1E3123] rounded-xl p-5 my-5 shadow-lg flex flex-row justify-between">
-    <View>
-      <Text className="text-white text-2xl">Steps</Text>
-      <Text className="text-white text-lg">{((stepCount / STEP_GOAL) * 100).toFixed(1)}%</Text>
-      
+      {/* Kartica za korake */}
+      <View className="bg-[#1E3123] rounded-xl p-5 my-5 shadow-lg flex flex-row justify-between">
+        <View>
+          <Text className="text-white text-2xl">Steps</Text>
+          <Text className="text-white text-lg">{((stepCount / stepGoal) * 100).toFixed(1)}%</Text>
+          
+        </View>
+
+        <View>
+          <Text className="text-white text-4xl font-bold">{stepCount}</Text>
+          <Text className="text-white">/{stepGoal}</Text>
+        </View>
+      </View>
+
+      {/* Druge kartice */}
+      <View className="flex flex-row justify-between mb-5">
+        <View className="bg-[#1E3123] rounded-xl p-5 flex-1 mr-2">
+          <Text className="text-white text-xl">Calories</Text>
+          <Text className="text-white text-3xl font-bold">{caloriesBurned} kcal</Text> {/* Update this line */}
+        </View>
+        <View className="bg-[#1E3123] rounded-xl p-5 flex-1 ml-2">
+          <Text className="text-white text-xl">Distance</Text>
+          <Text className="text-white text-3xl font-bold">{(((stepCount * STEP)/1000).toFixed(1))} km</Text>
+        </View>
+      </View>
+
+      {/* Progres cvijeta */}
+      <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg mb-5">
+        <Text className="text-white text-xl">Flower progress</Text>
+        <View className="bg-white h-2 rounded-full mt-2">
+          <View
+            style={{ width: `${(stepCount / 25000) * 100}%` }}
+            className="bg-[#2E4834] h-full rounded-full"
+          />
+        </View>
+        <Text className="text-white text-lg mt-2">25,000 km</Text>
+      </View>
+
+      <TouchableOpacity className=' bg-[#1E3123] rounded-xl shadow-lg p-5 mb-5' onPress={resetSteps}>
+        <Text className='text-white text-lg mt-2 text-center'>Restart</Text>
+      </TouchableOpacity>
+    
+      <TouchableOpacity className=' bg-[#1E3123] rounded-xl shadow-lg p-5' onPress={clearDataAndLogout}>
+        <Text className='text-white text-lg mt-2 text-center'>Logout</Text>
+      </TouchableOpacity>
     </View>
-
-    <View>
-      <Text className="text-white text-4xl font-bold">{stepCount}</Text>
-      <Text className="text-white">/{STEP_GOAL}</Text>
-    </View>
-  </View>
-
-  {/* Druge kartice */}
-  <View className="flex flex-row justify-between mb-5">
-    <View className="bg-[#1E3123] rounded-xl p-5 flex-1 mr-2">
-      <Text className="text-white text-xl">Calories</Text>
-      <Text className="text-white text-3xl font-bold">150 cal</Text>
-    </View>
-    <View className="bg-[#1E3123] rounded-xl p-5 flex-1 ml-2">
-      <Text className="text-white text-xl">Distance</Text>
-      <Text className="text-white text-3xl font-bold">7.4 km</Text>
-    </View>
-  </View>
-
-  {/* Progres cvijeta */}
-  <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg mb-5">
-    <Text className="text-white text-xl">Flower progress</Text>
-    <View className="bg-white h-2 rounded-full mt-2">
-      <View
-        style={{ width: `${(stepCount / 25000) * 100}%` }}
-        className="bg-[#2E4834] h-full rounded-full"
-      />
-    </View>
-    <Text className="text-white text-lg mt-2">25,000 km</Text>
-  </View>
-
-  <TouchableOpacity className=' bg-[#1E3123] rounded-xl shadow-lg p-5' onPress={resetSteps}>
-    <Text className='text-white text-lg mt-2 text-center'>Restart</Text>
-  </TouchableOpacity>
-</View>
 
   );
 }

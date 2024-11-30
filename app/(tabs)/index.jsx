@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, TouchableOpacity, Button } from 'react-native';
+import { Text, View } from 'react-native';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
-import '../../assets/global.css'
+import '../../assets/global.css';
 import { useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setStepCountSetter, setCoinsSetter } from '../utils/stateManagement';
+
+// IKONE
+import SvgCoins from '../../assets/images/icons/coins.svg';
+import SvgNotif from '../../assets/images/icons/notif.svg';
+import SvgSteps from '../../assets/images/icons/steps.svg';
+import SvgCal from '../../assets/images/icons/cal.svg';
+import SvgDist from '../../assets/images/icons/dist.svg';
+import CircularProgress from '../utils/CircularProgress';
 
 const STEP_COUNTER_TASK = 'STEP_COUNTER_TASK';
 const STEP = 0.75;
@@ -26,7 +35,7 @@ export default function Index() {
   const [gyroData, setGyroData] = useState({ x: 0, y: 0, z: 0 });
   const [subscription, setSubscription] = useState(null);
   const [gyroSubscription, setGyroSubscription] = useState(null);
-  const [stepCount, setStepCount, stepDistance] = useState(0);
+  const [stepCount, setStepCount] = useState(0);
   const [lastAcceleration, setLastAcceleration] = useState({ x: 0, y: 0, z: 0 });
   const [lastPeakTime, setLastPeakTime] = useState(0);
   const navigation = useNavigation();
@@ -34,8 +43,13 @@ export default function Index() {
   const [stepGoal, setStepGoal] = useState(10000); // Default step goal
   const [weight, setWeight] = useState(70); // Default weight in kg
   const [caloriesBurned, setCaloriesBurned] = useState(0);
+  const [coins, setCoins] = useState(0); // State variable to track coins
 
   useEffect(() => {
+    // Set the state setters
+    setStepCountSetter(setStepCount);
+    setCoinsSetter(setCoins);
+
     const checkUserSettings = async () => {
       const name = await AsyncStorage.getItem('userName');
       const storedStepGoal = await AsyncStorage.getItem('stepGoal');
@@ -47,6 +61,10 @@ export default function Index() {
         setStepGoal(parseInt(storedStepGoal, 10)); // Set step goal from storage
         setWeight(parseFloat(storedWeight)); // Set weight from storage
       }
+      const storedStepCount = await AsyncStorage.getItem('stepCount');
+      const storedCoins = await AsyncStorage.getItem('coins');
+      setStepCount(parseInt(storedStepCount, 10) || 0);
+      setCoins(parseInt(storedCoins, 10) || 0);
     };
 
     checkUserSettings();
@@ -60,7 +78,13 @@ export default function Index() {
   useEffect(() => {
     const caloriesPerStep = calculateCaloriesPerStep(weight);
     setCaloriesBurned(stepCount * caloriesPerStep);
+    setCoins(Math.floor(stepCount / 100)); // Update coins based on step count
   }, [stepCount, weight]);
+
+  useEffect(() => {
+    AsyncStorage.setItem('stepCount', stepCount.toString());
+    AsyncStorage.setItem('coins', coins.toString());
+  }, [stepCount, coins]);
 
   const calculateCaloriesPerStep = (weight) => {
     // Average calories burned per step for different weights
@@ -69,25 +93,24 @@ export default function Index() {
     return weight * caloriesPerKgPerStep;
   };
 
-  const clearDataAndLogout = async () => {
-    await AsyncStorage.clear();
-    navigation.navigate('login');
-  };
-
   const _subscribe = () => {
-    setSubscription(
-      Accelerometer.addListener(acceleration => {
-        setData(acceleration);
-        detectStep(acceleration, gyroData);
-      })
-    );
-    setGyroSubscription(
-      Gyroscope.addListener(gyro => {
-        setGyroData(gyro);
-      })
-    );
-    Accelerometer.setUpdateInterval(100); // Set update interval to 100ms
-    Gyroscope.setUpdateInterval(100); // Set update interval to 100ms
+    if (!subscription) {
+      setSubscription(
+        Accelerometer.addListener(acceleration => {
+          setData(acceleration);
+          detectStep(acceleration, gyroData);
+        })
+      );
+      Accelerometer.setUpdateInterval(100); // Set update interval to 100ms
+    }
+    if (!gyroSubscription) {
+      setGyroSubscription(
+        Gyroscope.addListener(gyro => {
+          setGyroData(gyro);
+        })
+      );
+      Gyroscope.setUpdateInterval(100); // Set update interval to 100ms
+    }
   };
 
   const _unsubscribe = () => {
@@ -152,11 +175,6 @@ export default function Index() {
     setLastAcceleration(filteredAcceleration);
   };
 
-  const resetSteps = () => {
-    setStepCount(1400);
-    console.log('Step Count reset to 0'); // Log reset action to terminal
-  };
-
   const startBackgroundTask = async () => {
     await BackgroundFetch.registerTaskAsync(STEP_COUNTER_TASK, {
       minimumInterval: 60, // Run every minute
@@ -166,21 +184,44 @@ export default function Index() {
     console.log('Background task registered');
   };
 
+  const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(1), 100); // Ensure percentage does not exceed 100
+
   return (
     <View className="bg-[#2E4834] min-h-screen flex flex-col p-5 space-y-6">
-      <View className="flex items-center justify-between">
-        <Text className="text-white text-xl">Hello, {userName}!</Text>
-        <Text className="text-white text-lg font-bold">1950</Text>
-      </View>
+      <View className="flex flex-row items-center justify-between">
+        <View>
+          <Text className="text-white text-lg">Hello, {userName}!</Text>
+          <Text className="text-white text-2xl font-bold">Welcome back</Text>
+        </View>
 
-      <Text className="text-white text-3xl font-bold">Welcome back</Text>
+                <View className='bg-[#1E3123] w-28 h-14 p-2 rounded-tl-3xl rounded-br-3xl rounded-tr rounded-bl justify-center'>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-white text-xl">{coins}</Text>
+            <SvgCoins width="18.58" height="24" />
+          </View>
+        </View>
+
+        <View className='bg-[#1E3123] w-14 h-14 p-5 rounded-full justify-center items-center'>
+          <SvgNotif width="19.5" height="24" />
+        </View>
+      </View>
 
       {/* Kartica za korake */}
       <View className="bg-[#1E3123] rounded-xl p-5 my-5 shadow-lg flex flex-row justify-between">
-        <View>
-          <Text className="text-white text-2xl">Steps</Text>
-          <Text className="text-white text-lg">{((stepCount / stepGoal) * 100).toFixed(1)}%</Text>
+        <View className='flex justify-center items-center'>
+          <View className='flex flex-row items-center'>
+            <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
+              <SvgSteps width="27.27" height="30"/>
+            </View>
+
+            <Text className="text-white text-2xl ml-5">Steps</Text>
+          </View>
           
+          <View className="flex flex-row items-center mt-5 ">
+            <CircularProgress percentage={percentage} />
+            <Text className="text-white text-lg ml-5">{percentage}%</Text>
+          </View>
+
         </View>
 
         <View>
@@ -192,35 +233,47 @@ export default function Index() {
       {/* Druge kartice */}
       <View className="flex flex-row justify-between mb-5">
         <View className="bg-[#1E3123] rounded-xl p-5 flex-1 mr-2">
-          <Text className="text-white text-xl">Calories</Text>
-          <Text className="text-white text-3xl font-bold">{caloriesBurned} kcal</Text> {/* Update this line */}
+          <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
+            <SvgCal width="23.44" height="30"/>
+          </View>
+
+          <View className='mt-5 ml-5'>
+            <Text className="text-white text-2xl">Calories</Text>
+            <Text className="text-white text-3xl font-light"><Text className='font-bold'>{Math.round(caloriesBurned)}</Text> cal</Text>
+          </View>
         </View>
+
         <View className="bg-[#1E3123] rounded-xl p-5 flex-1 ml-2">
-          <Text className="text-white text-xl">Distance</Text>
-          <Text className="text-white text-3xl font-bold">{(((stepCount * STEP)/1000).toFixed(1))} km</Text>
+          <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
+            <SvgDist width="21" height="30"/>
+          </View>
+
+          <View className='mt-5 ml-5'>
+            <Text className="text-white text-xl">Distance</Text>
+            <Text className="text-white text-3xl font-light"><Text className='font-bold'>{(((stepCount * STEP)/1000).toFixed(1))}</Text> km</Text>
+          </View>
         </View>
       </View>
 
       {/* Progres cvijeta */}
-      <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg mb-5">
-        <Text className="text-white text-xl">Flower progress</Text>
-        <View className="bg-white h-2 rounded-full mt-2">
-          <View
-            style={{ width: `${(stepCount / 25000) * 100}%` }}
-            className="bg-[#2E4834] h-full rounded-full"
-          />
+      <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg h-[235] flex flex-row justify-between">
+        <View className='flex-1'>
+          <Text className="text-white text-xl">Flower</Text>
+          <Text className="text-white text-xl">progress</Text>
+          <View className='mt-5'>
+            <Text className="text-white text-right text-xs font-thin">25,000 km</Text>
+
+            <View className="bg-[#2E4834] h-4 rounded-full mt-2">
+              <View
+                style={{ width: `${(stepCount / 25000) * 100}%` }}
+                className="bg-white h-full rounded-full"
+              />
+            </View>
+          </View>
         </View>
-        <Text className="text-white text-lg mt-2">25,000 km</Text>
+      
+        <View className='bg-[#2E4834] w-2/4 h-full ml-5 rounded'></View>
       </View>
-
-      <TouchableOpacity className=' bg-[#1E3123] rounded-xl shadow-lg p-5 mb-5' onPress={resetSteps}>
-        <Text className='text-white text-lg mt-2 text-center'>Restart</Text>
-      </TouchableOpacity>
-    
-      <TouchableOpacity className=' bg-[#1E3123] rounded-xl shadow-lg p-5' onPress={clearDataAndLogout}>
-        <Text className='text-white text-lg mt-2 text-center'>Logout</Text>
-      </TouchableOpacity>
     </View>
-
   );
 }

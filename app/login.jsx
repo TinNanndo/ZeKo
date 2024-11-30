@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import SvgAvatar from '../assets/images/icons/avatar.svg';
 
 export default function LoginScreen() {
   const [name, setName] = useState('');
@@ -14,32 +15,32 @@ export default function LoginScreen() {
     await AsyncStorage.setItem('userName', name);
     await AsyncStorage.setItem('stepGoal', stepGoal);
     await AsyncStorage.setItem('weight', weight);
-    navigation.navigate('(tabs)'); // Navigacija prema glavnoj stranici
+    navigation.navigate('(tabs)');
   };
 
   return (
     <View className="flex-1 bg-[#2E4834] justify-center items-center px-5">
-      {/* Ikona profila */}
-      <View className="bg-[#1E3123] h-32 w-32 rounded-full justify-center items-center mb-8">
-        <Text className="text-white text-6xl">👤</Text>
+      <View className='border-[5px] border-white rounded-full justify-center items-center p-3 mb-8'>
+      <View className="bg-[#1E3123] rounded-full">
+        <SvgAvatar width="90" height="90" />
       </View>
+      </View>
+      {/* <View className="bg-white h-32 w-32 rounded-full justify-center items-center"></View> */}
 
-      {/* Polje za unos korisničkog imena */}
       <TextInput
-        className="bg-[#1E3123] text-white text-lg px-4 py-3 rounded-xl mb-4 w-full"
+        className="bg-[#1E3123] text-white text-lg px-5 py-5 rounded-2xl mb-5 w-80"
         placeholder="Username"
-        placeholderTextColor="#fff"
+        placeholderTextColor="rgba(255, 255, 255, 0.5)"
         value={name}
         onChangeText={setName}
       />
 
-      {/* Picker za odabir cilja koraka */}
-      <View className="bg-white rounded-xl w-full mb-4">
-        <Picker
-            selectedValue={stepGoal}
-            dropdownIconColor="white"
-            style={{ color: 'grey' }}
-            onValueChange={(itemValue) => setStepGoal(itemValue)}
+      <View className="bg-white rounded-2xl w-80 mb-5">
+      <Picker
+          selectedValue={stepGoal}
+          dropdownIconColor="#2E4834"
+          style={{ color: '#2E4834', opacity: 0.5 }}
+          onValueChange={(itemValue) => setStepGoal(itemValue)}
         >
           <Picker.Item label="10,000 steps" value="10000" />
           <Picker.Item label="7,500 steps" value="7500" />
@@ -49,15 +50,15 @@ export default function LoginScreen() {
         </Picker>
       </View>
 
-        <TextInput
-            className='bg-[#1E3123] text-white text-lg px-4 py-3 rounded-xl mb-4 w-full'
-            placeholder='Enter your weight'
-            placeholderTextColor="#fff"
-            value={weight}
-            onChangeText={setWeight}
-            keyboardType='numeric'
-        />
-      {/* Gumb za potvrdu */}
+      <TextInput
+        className='bg-[#1E3123] text-white text-lg px-5 py-5 rounded-2xl w-80 mb-5'
+        placeholder='Enter your weight'
+        placeholderTextColor="rgba(255, 255, 255, 0.5)"
+        value={weight}
+        onChangeText={setWeight}
+        keyboardType='numeric'
+      />
+
       <TouchableOpacity
         className="bg-white px-8 py-3 rounded-full mt-5"
         onPress={handleLogin}

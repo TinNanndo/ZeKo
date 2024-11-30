@@ -17,7 +17,7 @@
   "expo": {
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": ["fs", "path", "react-native-svg-circular-progress", "tailwindcss", "expo-background-fetch", "react-native-wheel-picker-android"],
+        "exclude": ["fs", "path", "react-native-svg-circular-progress", "tailwindcss", "expo-background-fetch", "react-native-wheel-picker-android", "expo-splash-screen"],
         "listUnknownPackages": false
       }
     }

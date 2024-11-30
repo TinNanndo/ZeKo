@@ -14,12 +14,21 @@
   "jest": {
     "preset": "jest-expo"
   },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["fs", "path", "react-native-svg-circular-progress", "tailwindcss", "expo-background-fetch", "react-native-wheel-picker-android"],
+        "listUnknownPackages": false
+      }
+    }
+  },
   "dependencies": {
     "@expo/vector-icons": "^14.0.2",
     "@react-native-async-storage/async-storage": "^1.23.1",
     "@react-native-picker/picker": "^2.9.0",
     "@react-navigation/bottom-tabs": "^7.0.0",
     "@react-navigation/native": "^7.0.0",
+    "@react-navigation/stack": "^7.0.14",
     "expo": "~52.0.11",
     "expo-application": "~6.0.1",
     "expo-background-fetch": "~13.0.3",
@@ -29,7 +38,6 @@
     "expo-haptics": "~14.0.0",
     "expo-linking": "~7.0.3",
     "expo-location": "~18.0.2",
-    "expo-permissions": "^14.4.0",
     "expo-router": "~4.0.9",
     "expo-sensors": "~14.0.1",
     "expo-splash-screen": "~0.29.13",
@@ -38,7 +46,9 @@
     "expo-system-ui": "~4.0.4",
     "expo-task-manager": "~12.0.3",
     "expo-web-browser": "~14.0.1",
+    "fs": "^0.0.1-security",
     "nativewind": "^4.1.23",
+    "path": "^0.12.7",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-native": "^0.76.3",
@@ -56,6 +66,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@react-native-community/cli": "latest",
     "@types/jest": "^29.5.12",
     "@types/react": "~18.3.12",
     "@types/react-test-renderer": "^18.3.0",

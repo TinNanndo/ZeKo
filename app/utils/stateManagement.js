@@ -1,4 +1,3 @@
-
 let stepCountSetter = null;
 let coinsSetter = null;
 
@@ -20,4 +19,11 @@ export const setCoins = (coins) => {
   if (coinsSetter) {
     coinsSetter(coins);
   }
+};
+
+export default {
+  setStepCount,
+  setCoins,
+  setStepCountSetter,
+  setCoinsSetter,
 };

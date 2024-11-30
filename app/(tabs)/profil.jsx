@@ -12,14 +12,8 @@ export default function ProfilScreen() {
     navigation.navigate('login');
   };
 
-  const resetStepsAndCoins = async () => {
-    await AsyncStorage.setItem('stepCount', '0');
-    await AsyncStorage.setItem('coins', '0');
-    console.log('Steps and coins reset');
-  };
-
   const resetSteps = () => {
-    setStepCount(4325);
+    setStepCount(0);
     setCoins(0); // Reset coins when steps are reset
     console.log('Step Count reset to 0'); // Log reset action to terminal
   };

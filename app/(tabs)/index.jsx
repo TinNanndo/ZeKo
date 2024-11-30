@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View } from 'react-native';
+import { Text, View, SafeAreaView, AppState } from 'react-native'; // Import SafeAreaView and AppState
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
-import '../../assets/global.css';
+import '../../assets/global.css'; // Ensure this import is correct
 import { useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setStepCountSetter, setCoinsSetter } from '../utils/stateManagement';
@@ -44,6 +44,7 @@ export default function Index() {
   const [weight, setWeight] = useState(70); // Default weight in kg
   const [caloriesBurned, setCaloriesBurned] = useState(0);
   const [coins, setCoins] = useState(0); // State variable to track coins
+  const [appState, setAppState] = useState(AppState.currentState);
 
   useEffect(() => {
     // Set the state setters
@@ -74,6 +75,37 @@ export default function Index() {
       _unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const handleAppStateChange = async (nextAppState) => {
+    if (appState.match(/inactive|background/) && nextAppState === 'active') {
+      const currentDate = new Date().toISOString().split('T')[0];
+      const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+      if (lastSavedDate !== currentDate) {
+        saveDailyStats();
+        setStepCount(0);
+        await AsyncStorage.setItem('lastSavedDate', currentDate);
+      }
+    }
+    setAppState(nextAppState);
+  };
+
+  const saveDailyStats = async () => {
+    const currentDate = new Date().toISOString().split('T')[0];
+    const stats = await AsyncStorage.getItem('weeklyStats');
+    const weeklyStats = stats ? JSON.parse(stats) : [];
+    weeklyStats.push({ date: currentDate, steps: stepCount });
+    if (weeklyStats.length > 7) {
+      weeklyStats.shift(); // Keep only the last 7 days
+    }
+    await AsyncStorage.setItem('weeklyStats', JSON.stringify(weeklyStats));
+  };
 
   useEffect(() => {
     const caloriesPerStep = calculateCaloriesPerStep(weight);
@@ -121,7 +153,7 @@ export default function Index() {
   };
 
   const detectStep = (acceleration, gyroData) => {
-    const alpha = 0.2; // Adjusted filter strength for smoothing
+    const alpha = 0.25; // Adjusted filter strength for smoothing
     const filteredAcceleration = {
       x: alpha * lastAcceleration.x + (1 - alpha) * acceleration.x,
       y: alpha * lastAcceleration.y + (1 - alpha) * acceleration.y,
@@ -186,94 +218,115 @@ export default function Index() {
 
   const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(1), 100); // Ensure percentage does not exceed 100
 
+  const formatNumber = (number) => {
+    return new Intl.NumberFormat().format(number);
+  };
+
   return (
-    <View className="bg-[#2E4834] min-h-screen flex flex-col p-5 space-y-6">
-      <View className="flex flex-row items-center justify-between">
-        <View>
-          <Text className="text-white text-lg">Hello, {userName}!</Text>
-          <Text className="text-white text-2xl font-bold">Welcome back</Text>
-        </View>
+    <SafeAreaView className="bg-[#2E4834] flex-1"> {/* Wrap with SafeAreaView */}
+      <View className="flex flex-col p-5 space-y-6 pb-24 flex-1"> {/* Adjust bottom padding and add flex-1 */}
+        <View className="flex flex-row items-center justify-between">
+          <View className=''>
+            <Text className="text-white text-lg font-roman font-HelveticaNeueMedium">Hello, {userName}!</Text>
+            <Text className="text-white text-2xl font-bold font-HelveticaNeueBold -mt-1">Welcome back</Text>
+          </View>
 
-                <View className='bg-[#1E3123] w-28 h-14 p-2 rounded-tl-3xl rounded-br-3xl rounded-tr rounded-bl justify-center'>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-white text-xl">{coins}</Text>
-            <SvgCoins width="18.58" height="24" />
+          <View className='bg-[#1E3123] w-28 h-14 p-2 rounded-tl-3xl rounded-br-3xl rounded-tr rounded-bl justify-center'>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-white text-xl font-bold font-HelveticaNeueBold ml-2">{coins}</Text>
+              <SvgCoins width="19.5" height="24" />
+            </View>
+          </View>
+
+          <View className='bg-[#1E3123] w-14 h-14 p-5 rounded-full justify-center items-center'>
+            <SvgNotif width="19.5" height="24" />
           </View>
         </View>
 
-        <View className='bg-[#1E3123] w-14 h-14 p-5 rounded-full justify-center items-center'>
-          <SvgNotif width="19.5" height="24" />
-        </View>
-      </View>
+        {/* Kartica za korake */}
+        <View className="bg-[#1E3123] rounded-xl p-5 my-5 shadow-lg flex flex-row justify-between mb-5">
+          <View className='flex justify-center items-center'>
+            <View className='flex flex-row items-center'>
+              <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
+                <SvgSteps width="27.27" height="30"/>
+              </View>
 
-      {/* Kartica za korake */}
-      <View className="bg-[#1E3123] rounded-xl p-5 my-5 shadow-lg flex flex-row justify-between">
-        <View className='flex justify-center items-center'>
-          <View className='flex flex-row items-center'>
+              <Text className="text-white text-2xl ml-5 font-roman font-HelveticaNeueRoman">Steps</Text>
+            </View>
+            
+            <View className="flex flex-row items-center mt-5 right-[15]">
+              <CircularProgress percentage={percentage} />
+              <Text className="text-white text-lg ml-5 font-thin font-HelveticaNeueThin">{percentage}%</Text>
+            </View>
+
+          </View>
+
+          <View className="flex items-center justify-center mr-6">
+            <Text className="text-white text-2xl font-black font-HelveticaNeueBlack mr-16">
+              {formatNumber(stepCount)}
+            </Text>
+
+            <View
+              style={{
+                height: 1,
+                backgroundColor: 'white',
+                borderRadius: 1,
+                width: 76.28,
+                transform: [{ rotate: '-34.32deg' }],
+              }}
+            />
+
+            <Text className="text-white text-2xl font-thin font-HelveticaNeueThin ml-16">
+              {formatNumber(stepGoal)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Druge kartice */}
+        <View className="flex flex-row justify-between mb-5">
+          <View className="bg-[#1E3123] rounded-xl p-5 flex-1 mr-2">
             <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
-              <SvgSteps width="27.27" height="30"/>
+              <SvgCal width="23.44" height="30"/>
             </View>
 
-            <Text className="text-white text-2xl ml-5">Steps</Text>
-          </View>
-          
-          <View className="flex flex-row items-center mt-5 ">
-            <CircularProgress percentage={percentage} />
-            <Text className="text-white text-lg ml-5">{percentage}%</Text>
+            <View className='mt-5 ml-5'>
+              <Text className="text-white text-2xl font-roman font-HelveticaNeueRoman">Calories</Text>
+              <Text className="text-white text-3xl font-thin font-HelveticaNeueThin"><Text className='font-HelveticaNeueBlack font-black'>{Math.round(caloriesBurned)}</Text> cal</Text>
+            </View>
           </View>
 
-        </View>
+          <View className="bg-[#1E3123] rounded-xl p-5 flex-1 ml-2">
+            <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
+              <SvgDist width="21" height="30"/>
+            </View>
 
-        <View>
-          <Text className="text-white text-4xl font-bold">{stepCount}</Text>
-          <Text className="text-white">/{stepGoal}</Text>
-        </View>
-      </View>
-
-      {/* Druge kartice */}
-      <View className="flex flex-row justify-between mb-5">
-        <View className="bg-[#1E3123] rounded-xl p-5 flex-1 mr-2">
-          <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
-            <SvgCal width="23.44" height="30"/>
-          </View>
-
-          <View className='mt-5 ml-5'>
-            <Text className="text-white text-2xl">Calories</Text>
-            <Text className="text-white text-3xl font-light"><Text className='font-bold'>{Math.round(caloriesBurned)}</Text> cal</Text>
-          </View>
-        </View>
-
-        <View className="bg-[#1E3123] rounded-xl p-5 flex-1 ml-2">
-          <View className="bg-[#2E4834] w-14 h-14 rounded-full justify-center items-center">
-            <SvgDist width="21" height="30"/>
-          </View>
-
-          <View className='mt-5 ml-5'>
-            <Text className="text-white text-xl">Distance</Text>
-            <Text className="text-white text-3xl font-light"><Text className='font-bold'>{(((stepCount * STEP)/1000).toFixed(1))}</Text> km</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Progres cvijeta */}
-      <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg h-[235] flex flex-row justify-between">
-        <View className='flex-1'>
-          <Text className="text-white text-xl">Flower</Text>
-          <Text className="text-white text-xl">progress</Text>
-          <View className='mt-5'>
-            <Text className="text-white text-right text-xs font-thin">25,000 km</Text>
-
-            <View className="bg-[#2E4834] h-4 rounded-full mt-2">
-              <View
-                style={{ width: `${(stepCount / 25000) * 100}%` }}
-                className="bg-white h-full rounded-full"
-              />
+            <View className='mt-5 ml-5'>
+              <Text className="text-white text-xl font-roman font-HelveticaNeueRoman">Distance</Text>
+              <Text className="text-white text-3xl font-thin font-HelveticaNeueThin"><Text className='font-HelveticaNeueBlack font-black'>{(((stepCount * STEP)/1000).toFixed(1))}</Text> km</Text>
             </View>
           </View>
         </View>
-      
-        <View className='bg-[#2E4834] w-2/4 h-full ml-5 rounded'></View>
+
+        {/* Progres cvijeta */}
+        <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg flex flex-row justify-between mb-5 flex-1">
+          <View className='flex-1'>
+            <Text className="text-white text-xl font-medium font-HelveticaNeueMedium">Flower</Text>
+            <Text className="text-white text-xl font-medium font-HelveticaNeueMedium">progress</Text>
+            <View className='mt-5'>
+              <Text className="text-white text-right text-xs font-light font-HelveticaNeueLight">25,000 km</Text>
+
+              <View className="bg-[#2E4834] h-6 rounded-full mt-2">
+                <View
+                  style={{ width: `${Math.min((stepCount / 25000) * 100, 100)}%` }}
+                  className="bg-white h-full rounded-full"
+                />
+              </View>
+            </View>
+          </View>
+        
+          <View className='bg-[#2E4834] w-2/4 h-full ml-5 rounded'></View>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }

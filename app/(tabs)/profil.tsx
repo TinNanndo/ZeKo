@@ -9,7 +9,7 @@ export default function ProfilScreen() {
 
   const clearDataAndLogout = async () => {
     await AsyncStorage.clear();
-    navigation.navigate('login');
+    navigation.navigate('login'); // Change this line
   };
 
   const resetSteps = () => {

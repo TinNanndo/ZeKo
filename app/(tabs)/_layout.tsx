@@ -1,9 +1,9 @@
 import { Tabs } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
-import SvgHome from '../../assets/images/icons/home.svg';
-import SvgGarden from '../../assets/images/icons/garden.svg';
-import SvgStats from '../../assets/images/icons/stats.svg';
-import SvgProfil from '../../assets/images/icons/profil.svg';
+import SvgHome from '../../assets/icons/home.svg';
+import SvgGarden from '../../assets/icons/garden.svg';
+import SvgStats from '../../assets/icons/stats.svg';
+import SvgProfil from '../../assets/icons/profil.svg';
 
 const styles = StyleSheet.create({
   container: {
@@ -49,20 +49,23 @@ export default function TabLayout() {
               IconComponent = SvgProfil;
             }
 
-            return (
-              <View
-                style={[
-                  styles.tabBarIconContainer,
-                  focused && styles.tabBarIconContainerFocused,
-                ]}
-              >
-                <IconComponent
-                  width={30}
-                  height={30}
-                  fill={color}
-                />
-              </View>
-            );
+            if (IconComponent) {
+              return (
+                <View
+                  style={[
+                    styles.tabBarIconContainer,
+                    focused && styles.tabBarIconContainerFocused,
+                  ]}
+                >
+                  <IconComponent
+                    width={30}
+                    height={30}
+                    fill={color}
+                  />
+                </View>
+              );
+            }
+            return null;
           },
         })}
       >

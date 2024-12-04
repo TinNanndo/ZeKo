@@ -5,12 +5,7 @@
     "version": "1.0.0",
     "userInterfaceStyle": "automatic",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -24,8 +19,8 @@
         "ACTIVITY_RECOGNITION"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1E3123"
       },
       "package": "com.tinnanndo.ZeKo",
       "newArchEnabled": true
@@ -33,7 +28,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/favicon.png"
     },
     "scheme": "zeko",
     "plugins": [
@@ -41,10 +36,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#1E3123"
         }
       ]
     ],

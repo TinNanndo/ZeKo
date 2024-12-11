@@ -1,8 +1,7 @@
-import type { ConfigContext, ExpoConfig } from '@expo/config';
 import fs from 'fs';
 import path from 'path';
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+export default ({ config }: { config: any }): any => {
   const fontsDir = path.resolve(__dirname, './assets/fonts');
   const fontFiles = fs.readdirSync(fontsDir).map(file => path.join(fontsDir, file));
 

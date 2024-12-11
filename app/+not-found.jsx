@@ -13,7 +13,7 @@ export default function NotFoundScreen() {
             Ooops! Not Found
           </Text>
           <Link href="/" className='max-w-fit text-white text-center bg-[#2E4834] rounded-2xl p-5'>
-            Return
+            <Text>Return</Text>
           </Link>
         </View>
       </View>

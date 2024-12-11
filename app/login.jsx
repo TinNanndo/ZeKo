@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import SvgAvatar from '../assets/images/icons/avatar.svg';
+import SvgAvatar from '../assets/icons/avatar.svg';
 
 export default function LoginScreen() {
   const [name, setName] = useState('');

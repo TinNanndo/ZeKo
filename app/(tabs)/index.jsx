@@ -9,11 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setStepCountSetter, setCoinsSetter } from '../utils/stateManagement';
 
 // IKONE
-import SvgCoins from '../../assets/images/icons/coins.svg';
-import SvgNotif from '../../assets/images/icons/notif.svg';
-import SvgSteps from '../../assets/images/icons/steps.svg';
-import SvgCal from '../../assets/images/icons/cal.svg';
-import SvgDist from '../../assets/images/icons/dist.svg';
+import SvgCoins from '../../assets/icons/coins.svg';
+import SvgNotif from '../../assets/icons/notif.svg';
+import SvgSteps from '../../assets/icons/steps.svg';
+import SvgCal from '../../assets/icons/cal.svg';
+import SvgDist from '../../assets/icons/dist.svg';
 import CircularProgress from '../utils/CircularProgress';
 
 const STEP_COUNTER_TASK = 'STEP_COUNTER_TASK';
@@ -31,7 +31,7 @@ TaskManager.defineTask(STEP_COUNTER_TASK, ({ data, error }) => {
 });
 
 export default function Index() {
-  const [{ x, y, z }, setData] = useState({ x: 0, y: 0, z: 0 });
+  const [setData] = useState({ x: 0, y: 0, z: 0 });
   const [gyroData, setGyroData] = useState({ x: 0, y: 0, z: 0 });
   const [subscription, setSubscription] = useState(null);
   const [gyroSubscription, setGyroSubscription] = useState(null);
@@ -223,13 +223,18 @@ export default function Index() {
   };
 
   return (
-    <SafeAreaView className="bg-[#2E4834] flex-1"> {/* Wrap with SafeAreaView */}
-      <View className="flex flex-col p-5 space-y-6 pb-24 flex-1"> {/* Adjust bottom padding and add flex-1 */}
+    <SafeAreaView className="bg-[#2E4834] flex-1">
+      <View className="flex flex-col p-5 space-y-6 pb-24 flex-1">
         <View className="flex flex-row items-center justify-between">
-          <View className=''>
-            <Text className="text-white text-lg font-roman font-HelveticaNeueMedium">Hello, {userName}!</Text>
-            <Text className="text-white text-2xl font-bold font-HelveticaNeueBold -mt-1">Welcome back</Text>
-          </View>
+        <View className=''>
+          <Text className="text-white text-lg font-roman font-HelveticaNeueMedium">
+            Hello, {userName || 'User'}!
+          </Text>
+          <Text className="text-white text-2xl font-bold font-HelveticaNeueBold -mt-1">
+            Welcome back
+          </Text>
+        </View>
+
 
           <View className='bg-[#1E3123] w-28 h-14 p-2 rounded-tl-3xl rounded-br-3xl rounded-tr rounded-bl justify-center'>
             <View className="flex-row items-center justify-between">
@@ -262,9 +267,9 @@ export default function Index() {
           </View>
 
           <View className="flex items-center justify-center mr-6">
-            <Text className="text-white text-2xl font-black font-HelveticaNeueBlack mr-16">
-              {formatNumber(stepCount)}
-            </Text>
+          <Text className="text-white text-2xl font-black font-HelveticaNeueBlack mr-16">
+            {formatNumber(stepCount)}
+          </Text>
 
             <View
               style={{
@@ -313,8 +318,9 @@ export default function Index() {
             <Text className="text-white text-xl font-medium font-HelveticaNeueMedium">Flower</Text>
             <Text className="text-white text-xl font-medium font-HelveticaNeueMedium">progress</Text>
             <View className='mt-5'>
-              <Text className="text-white text-right text-xs font-light font-HelveticaNeueLight">25,000 km</Text>
-
+              <Text className="text-white text-right text-xs font-light font-HelveticaNeueLight">
+                25,000 km
+              </Text>
               <View className="bg-[#2E4834] h-6 rounded-full mt-2">
                 <View
                   style={{ width: `${Math.min((stepCount / 25000) * 100, 100)}%` }}
@@ -323,9 +329,9 @@ export default function Index() {
               </View>
             </View>
           </View>
-        
           <View className='bg-[#2E4834] w-2/4 h-full ml-5 rounded'></View>
         </View>
+
       </View>
     </SafeAreaView>
   );

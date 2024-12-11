@@ -1,22 +1,28 @@
 import { Tabs } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
-import SvgHome from '../../assets/images/icons/home.svg';
-import SvgGarden from '../../assets/images/icons/garden.svg';
-import SvgStats from '../../assets/images/icons/stats.svg';
-import SvgProfil from '../../assets/images/icons/profil.svg';
+import SvgHome from '../../assets/icons/home.svg';
+import SvgGarden from '../../assets/icons/garden.svg';
+import SvgStats from '../../assets/icons/stats.svg';
+import SvgProfil from '../../assets/icons/profil.svg';
+
+const COLORS = {
+  backgroundColor: '#2E4834',
+  transparent: 'transparent',
+  tabBarBackground: '#1E3123',
+};
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#2E4834', // Same background color as tabBarStyle
+    backgroundColor: COLORS.backgroundColor,
+    flex: 1, // Same background color as tabBarStyle
   },
   tabBarIconContainer: {
-    backgroundColor: 'transparent',
+    backgroundColor: COLORS.transparent,
     borderRadius: 15,
     padding: 10,
   },
   tabBarIconContainerFocused: {
-    backgroundColor: '#2E4834',
+    backgroundColor: COLORS.backgroundColor,
   },
 });
 
@@ -27,7 +33,7 @@ export default function TabLayout() {
         screenOptions={({ route }) => ({
           tabBarStyle: {
             borderTopWidth: 0,
-            backgroundColor: '#1E3123',
+            backgroundColor: COLORS.tabBarBackground,
             height: 65, // Ensure consistent height
             paddingTop: 8,
             borderTopRightRadius: 15,
@@ -37,7 +43,7 @@ export default function TabLayout() {
             borderRadius: 15,
             padding: 5,
           },
-          tabBarIcon: ({ focused, color, size }) => {
+          tabBarIcon: ({ focused, color }) => {
             let IconComponent;
             if (route.name === 'index') {
               IconComponent = SvgHome;

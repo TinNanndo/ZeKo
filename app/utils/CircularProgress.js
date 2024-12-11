@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -37,6 +38,9 @@ const CircularProgress = ({ percentage }) => {
       </Svg>
     </View>
   );
+};
+CircularProgress.propTypes = {
+  percentage: PropTypes.number.isRequired,
 };
 
 export default CircularProgress;

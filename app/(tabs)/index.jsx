@@ -31,7 +31,7 @@ TaskManager.defineTask(STEP_COUNTER_TASK, ({ data, error }) => {
 });
 
 export default function Index() {
-  const [setData] = useState({ x: 0, y: 0, z: 0 });
+  const [data, setData] = useState({ x: 0, y: 0, z: 0 });
   const [gyroData, setGyroData] = useState({ x: 0, y: 0, z: 0 });
   const [subscription, setSubscription] = useState(null);
   const [gyroSubscription, setGyroSubscription] = useState(null);

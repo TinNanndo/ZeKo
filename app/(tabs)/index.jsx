@@ -6,7 +6,7 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import '../../assets/global.css'; // Ensure this import is correct
 import { useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setStepCountSetter, setCoinsSetter } from '../utils/stateManagement';
+import { useStats } from '../context/StatsContext';
 
 // IKONE
 import SvgCoins from '../../assets/icons/coins.svg';
@@ -30,27 +30,21 @@ TaskManager.defineTask(STEP_COUNTER_TASK, ({ data, error }) => {
   }
 });
 
-export default function Index() {
+function IndexComponent() {
   const [data, setData] = useState({ x: 0, y: 0, z: 0 });
   const [gyroData, setGyroData] = useState({ x: 0, y: 0, z: 0 });
   const [subscription, setSubscription] = useState(null);
   const [gyroSubscription, setGyroSubscription] = useState(null);
-  const [stepCount, setStepCount] = useState(0);
   const [lastAcceleration, setLastAcceleration] = useState({ x: 0, y: 0, z: 0 });
   const [lastPeakTime, setLastPeakTime] = useState(0);
   const navigation = useNavigation();
   const [userName, setUserName] = useState('');
   const [stepGoal, setStepGoal] = useState(10000); // Default step goal
   const [weight, setWeight] = useState(70); // Default weight in kg
-  const [caloriesBurned, setCaloriesBurned] = useState(0);
-  const [coins, setCoins] = useState(0); // State variable to track coins
   const [appState, setAppState] = useState(AppState.currentState);
+  const { stepCount, setStepCount, caloriesBurned, setCaloriesBurned, distance, setDistance, coins, setCoins } = useStats();
 
   useEffect(() => {
-    // Set the state setters
-    setStepCountSetter(setStepCount);
-    setCoinsSetter(setCoins);
-
     const checkUserSettings = async () => {
       const name = await AsyncStorage.getItem('userName');
       const storedStepGoal = await AsyncStorage.getItem('stepGoal');
@@ -109,7 +103,9 @@ export default function Index() {
 
   useEffect(() => {
     const caloriesPerStep = calculateCaloriesPerStep(weight);
-    setCaloriesBurned(stepCount * caloriesPerStep);
+    const newCaloriesBurned = stepCount * caloriesPerStep;
+    setCaloriesBurned(newCaloriesBurned);
+    setDistance(((stepCount * STEP) / 1000).toFixed(1));
     setCoins(Math.floor(stepCount / 100)); // Update coins based on step count
   }, [stepCount, weight]);
 
@@ -216,7 +212,7 @@ export default function Index() {
     console.log('Background task registered');
   };
 
-  const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(1), 100); // Ensure percentage does not exceed 100
+  const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(0), 100); // Ensure percentage does not exceed 100
 
   const formatNumber = (number) => {
     return new Intl.NumberFormat().format(number);
@@ -261,7 +257,7 @@ export default function Index() {
             
             <View className="flex flex-row items-center mt-5 right-[15]">
               <CircularProgress percentage={percentage} />
-              <Text className="text-white text-lg ml-5 font-thin font-HelveticaNeueThin">{percentage}%</Text>
+              <Text className="text-white text-2xl ml-5 font-thin font-HelveticaNeueThin">{percentage}%</Text>
             </View>
 
           </View>
@@ -333,6 +329,14 @@ export default function Index() {
         </View>
 
       </View>
+    </SafeAreaView>
+  );
+}
+
+export default function Index() {
+  return (
+    <SafeAreaView className="bg-[#2E4834] flex-1">
+      <IndexComponent />
     </SafeAreaView>
   );
 }

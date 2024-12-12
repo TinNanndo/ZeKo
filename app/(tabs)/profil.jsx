@@ -2,10 +2,11 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from 'expo-router';
-import { setStepCount, setCoins } from '../utils/stateManagement';
+import { useStats } from '../context/StatsContext';
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
+  const { setStepCount, setCoins } = useStats();
 
   const clearDataAndLogout = async () => {
     await AsyncStorage.clear();
@@ -13,7 +14,7 @@ export default function ProfilScreen() {
   };
 
   const resetSteps = () => {
-    setStepCount(0);
+    setStepCount(4324);
     setCoins(0); // Reset coins when steps are reset
     console.log('Step Count reset to 0'); // Log reset action to terminal
   };

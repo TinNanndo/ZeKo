@@ -82,7 +82,7 @@ function IndexComponent() {
       const currentDate = new Date().toISOString().split('T')[0];
       const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
       if (lastSavedDate !== currentDate) {
-        saveDailyStats();
+        await saveDailyStats();
         setStepCount(0);
         await AsyncStorage.setItem('lastSavedDate', currentDate);
       }

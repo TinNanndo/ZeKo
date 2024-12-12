@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Text, View, SafeAreaView, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
-import CircularProgress from '../utils/RectProgress';
 import RectProgress from '../utils/RectProgress';
 
 export default function StatsScreen() {
   const [weeklyStats, setWeeklyStats] = useState([]);
   const [stepGoal, setStepGoal] = useState(10000); // Default step goal
+  const [selectedDay, setSelectedDay] = useState(null); // State variable to keep track of the selected day
   const { stepCount, caloriesBurned, distance, coins } = useStats(); // Use stepCount from context
 
   useEffect(() => {
@@ -50,6 +50,11 @@ export default function StatsScreen() {
     return new Intl.NumberFormat().format(number);
   };
 
+  const handleDayClick = (day, date) => {
+    setSelectedDay({ day, date });
+    console.log(`Selected day: ${day}, Date: ${date}`);
+  };
+
   return (
     <SafeAreaView className="bg-[#2E4834] flex-1">
       <View className="flex flex-col p-5 space-y-6 pb-24 flex-1">
@@ -65,21 +70,16 @@ export default function StatsScreen() {
                 <Text className={`text-lg ${isSunday ? 'text-red-500' : 'text-white'}`}>
                   {day}
                 </Text>
-                {recordedDay ? (
                   <TouchableOpacity
-                    className="w-9 h-16 rounded-[15px] bg-[#2E4834] flex items-center justify-center"
-                    onPress={() => console.log(`Clicked on ${day}`)}
+                    className="flex flex-col items-center"
+                    onPress={() => handleDayClick(day, date)}
                   >
-                    <Text className="text-lg text-red-500">{recordedDay.steps}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View className="flex flex-col items-center">
                     <View className="w-[35px] h-[60px] rounded-[15px] bg-[#1E3123] flex items-center pt-2">
                       <RectProgress percentage={percentage} width={24} height={28} strokeWidth={6} borderRadius={10} strokeColor="#fff" />
                     </View>
-                    <Text className='text-lg text-white'>{date}</Text>
-                  </View>
-                )}
+                  </TouchableOpacity>
+
+                <Text className='text-lg text-white'>{date}</Text>
               </View>
             );
           })}
@@ -89,8 +89,8 @@ export default function StatsScreen() {
         <View className="bg-[#1E3123] rounded-xl p-5 shadow-lg my-5">
           <View className="flex flex-col items-center space-y-4">
             <View className="relative">
-              <CircularProgress percentage={percentage} />
-              <Text className="text-white text-xl font-bold">{percentage}%</Text>
+            <RectProgress percentage={percentage} width={81} height={110} strokeWidth={15} borderRadius={15} strokeColor="#fff" />
+            <Text className="text-white text-xl font-bold">{percentage}%</Text>
             </View>
 
             <View className="flex flex-row justify-between w-full">

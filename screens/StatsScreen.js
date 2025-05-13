@@ -17,31 +17,34 @@ export default function StatsScreen() {
     weeklyHistory  // Add this to access history from context
   } = useStats();
   const [isLoading, setIsLoading] = useState(true);
-
-  // This effect combines weeklyHistory from context with AsyncStorage data
+  
   useEffect(() => {
-  const fetchWeeklyStats = async () => {
-    try {
-      const stats = await AsyncStorage.getItem('weeklyStats');
-      if (stats) {
-        const parsedStats = JSON.parse(stats);
-        console.log('Fetched weekly stats:', parsedStats);
-        setWeeklyStats(parsedStats);
-        
-        // Debug log all dates
-        console.log('All available stats dates:', parsedStats.map(stat => stat.date));
-      } else {
-        console.log('No weekly stats found');
+    const fetchWeeklyStats = async () => {
+      try {
+        // Use weeklyHistory from context directly instead of loading from AsyncStorage
+        if (weeklyHistory && weeklyHistory.length > 0) {
+          console.log('Using weekly stats from context:', weeklyHistory);
+          setWeeklyStats(weeklyHistory);
+        } else {
+          // Fallback to AsyncStorage if needed
+          const stats = await AsyncStorage.getItem('weeklyStats');
+          if (stats) {
+            const parsedStats = JSON.parse(stats);
+            console.log('Fetched weekly stats from storage:', parsedStats);
+            setWeeklyStats(parsedStats);
+          } else {
+            console.log('No weekly stats found');
+            setWeeklyStats([]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching weekly stats:', error);
         setWeeklyStats([]);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching weekly stats:', error);
-      setWeeklyStats([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+    };
+  
     const fetchStepGoal = async () => {
       try {
         const storedStepGoal = await AsyncStorage.getItem('stepGoal');
@@ -50,7 +53,7 @@ export default function StatsScreen() {
         console.error('Error fetching step goal:', error);
       }
     };
-
+  
     fetchWeeklyStats();
     fetchStepGoal();
   }, [weeklyHistory]); // Re-run when weeklyHistory changes
@@ -273,15 +276,10 @@ const logAvailableDates = () => {
                   {day}
                 </Text>
                 <TouchableOpacity
-                  style={[
-                    styles.dayButton,
-                    isSelected && styles.selectedDayButton
-                  ]}
                   onPress={() => handleDayClick(day, dateObj, index)}
                 >
                   <View style={[
-                    styles.progressContainer,
-                    isSelected && styles.selectedProgressContainer
+                    styles.progressContainer
                   ]}>
                     <RectProgress 
                       percentage={dayPercentage} 
@@ -289,14 +287,19 @@ const logAvailableDates = () => {
                       height={28} 
                       strokeWidth={6} 
                       borderRadius={10} 
-                      strokeColor="#fff" 
+                      strokeColor="#fff"
                     />
+
+                    {/* Put the indicator at the bottom of the progress container */}
+                    {isSelected && (
+                      <View style={styles.dayButton} />
+                    )}
                   </View>
                 </TouchableOpacity>
                 <Text style={[
                   styles.dateText,
                   isSelected && styles.selectedDateText,
-                  isToday && styles.todayText // You can add this style if you want to highlight today
+                  isToday && styles.todayText
                 ]}>{date}</Text>
               </View>
             );
@@ -306,11 +309,6 @@ const logAvailableDates = () => {
         {/* Stats Card */}
         <View style={styles.statsCard}>
           <View style={styles.statsContent}>
-            {selectedDay && (
-              <Text style={styles.selectedDayTitle}>
-                {daysOfWeek[selectedDay.index]} - {selectedDay.date}
-              </Text>
-            )}
             <View style={styles.progressWrapper}>
               <RectProgress 
                 percentage={percentage} 
@@ -390,31 +388,27 @@ const styles = StyleSheet.create({
   sundayText: {
     color: 'red',
   },
-  dayButton: {
-    alignItems: 'center',
-    marginVertical: 5,
-  },
-  selectedDayButton: {
-    transform: [{ scale: 1.1 }],
-  },
-  progressContainer: {
-    width: 35,
-    height: 60,
-    borderRadius: 15,
-    backgroundColor: '#1E3123',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 2,
-  },
-  selectedProgressContainer: {
-    backgroundColor: '#344E3A',
-    borderColor: '#fff',
-    borderWidth: 1,
-  },
+progressContainer: {
+  width: 35,
+  height: 60,
+  borderRadius: 15,
+  backgroundColor: '#1E3123',
+  justifyContent: 'space-between', // Change from 'top' to distribute content
+  alignItems: 'center',
+  paddingTop: 8,
+  paddingBottom: 8, // Add padding at bottom for the indicator
+},
   dateText: {
     fontSize: 18,
     color: 'white',
   },
+dayButton: {
+  backgroundColor: '#2E4834',
+  width: 12,
+  height: 12,
+  borderRadius: 999, // Half of width/height to make a perfect circle
+  marginTop: 5,    // Add some space below the progress bar
+},
   selectedDateText: {
     fontWeight: 'bold',
   },

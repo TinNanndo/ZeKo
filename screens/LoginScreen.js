@@ -17,6 +17,12 @@ export default function LoginScreen() {
     const checkLoginStatus = async () => {
       try {
         const storedName = await AsyncStorage.getItem('userName');
+        // Make sure lastSavedDate is set on first login to avoid day transition issues
+        const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+        if (!lastSavedDate) {
+          await AsyncStorage.setItem('lastSavedDate', new Date().toISOString().split('T')[0]);
+        }
+        
         if (storedName) {
           // User is already logged in, navigate to Home
           navigation.replace('Home');
@@ -27,18 +33,31 @@ export default function LoginScreen() {
         setIsLoading(false);
       }
     };
-
+  
     checkLoginStatus();
   }, []);
-
+  
   const handleLogin = async () => {
     if (!name || !stepGoal || !weight) {
       setModalVisible(true);
     } else {
       try {
+        const currentDate = new Date().toISOString().split('T')[0];
+        
+        // Save user info
         await AsyncStorage.setItem('userName', name);
         await AsyncStorage.setItem('stepGoal', stepGoal);
         await AsyncStorage.setItem('weight', weight);
+        
+        // Initialize stats storage with zeros
+        await AsyncStorage.setItem('stepCount', '0');
+        await AsyncStorage.setItem('caloriesBurned', '0');
+        await AsyncStorage.setItem('distance', '0');
+        await AsyncStorage.setItem('coins', '0');
+        await AsyncStorage.setItem('lastSavedDate', currentDate);
+        await AsyncStorage.setItem('weeklyStats', JSON.stringify([]));
+        
+        // Navigate to home screen
         navigation.replace('Home');
       } catch (error) {
         console.error('Error saving data:', error);

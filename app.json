@@ -13,14 +13,14 @@
     },
     "android": {
       "package": "com.tinnanndo.zekofix",
-      "premissions": [
+      "permissions": [
         "ACTIVITY_RECOGNITION",
-        "FORGROUND_SERVICE",
+        "FOREGROUND_SERVICE",
         "WAKE_LOCK"
       ],
-      "foregroundService": {
-        "name": "ZeKo",
-        "description": "Tracking your steps continuosly in the background"
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
       }
     },
     "owner": "tinnanndo",
@@ -28,6 +28,16 @@
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
-    }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "foregroundService": true
+          }
+        }
+      ]
+    ]
   }
 }

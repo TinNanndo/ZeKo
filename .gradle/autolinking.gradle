@@ -1,0 +1,27 @@
+// autolinking.gradle
+def useExpoModules = {
+    def expoPackageJsonPath
+    try {
+        def commandResult = ["node", "--print", "require.resolve('expo/package.json')"].execute([], rootDir)
+        if (commandResult.waitFor() == 0) {
+            expoPackageJsonPath = new File(commandResult.text.trim())
+        } else {
+            println("Error: Could not find expo/package.json. Command failed with exit code ${commandResult.exitValue()}")
+            return
+        }
+    } catch (Exception e) {
+        println("Error: Could not find expo/package.json. Exception: ${e.message}")
+        return
+    }
+
+    if (expoPackageJsonPath == null || !expoPackageJsonPath.exists()) {
+        println("Error: expo/package.json not found at the expected location.")
+        return
+    }
+
+    def expoRoot = expoPackageJsonPath.getParentFile()
+    def expoModulesPath = new File(expoRoot, "android/maven")
+    settings.ext.expoModulesPath = expoModulesPath
+}
+
+useExpoModules()

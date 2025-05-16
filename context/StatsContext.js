@@ -11,6 +11,8 @@ export const StatsProvider = ({ children }) => {
   const [weeklyHistory, setWeeklyHistory] = useState([]);
   const [lastSavedDate, setLastSavedDate] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
 
   // Load initial stats
   useEffect(() => {
@@ -40,9 +42,12 @@ export const StatsProvider = ({ children }) => {
         });
         
         setIsInitialized(true);
+        setIsReady(true);
+        console.log('Stats fully loaded and ready');
       } catch (error) {
         console.error('Error loading stats:', error);
         setIsInitialized(true);
+        setIsReady(true);
       }
     };
 
@@ -152,7 +157,8 @@ export const StatsProvider = ({ children }) => {
         setCoins,
         weeklyHistory,
         resetDailyStats,
-        saveCurrentStatsToHistory
+        saveCurrentStatsToHistory,
+        isReady
       }}
     >
       {children}

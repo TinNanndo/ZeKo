@@ -13,6 +13,8 @@ export default function LoginScreen() {
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
 
+  // In the useEffect where you check login status, remove this block:
+  
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -21,11 +23,6 @@ export default function LoginScreen() {
         const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
         if (!lastSavedDate) {
           await AsyncStorage.setItem('lastSavedDate', new Date().toISOString().split('T')[0]);
-        }
-        
-        if (storedName) {
-          // User is already logged in, navigate to Home
-          navigation.replace('Home');
         }
       } catch (error) {
         console.error('Error checking login status:', error);

@@ -22,62 +22,87 @@ function HomeScreen() {
   const [stepGoal, setStepGoal] = useState(10000);
   const [weight, setWeight] = useState(70);
   const [appState, setAppState] = useState(AppState.currentState);
-  const { stepCount, setStepCount, caloriesBurned, setCaloriesBurned, distance, setDistance, coins, setCoins } = useStats();
+  const { stepCount, setStepCount, caloriesBurned, setCaloriesBurned, distance, setDistance, coins, setCoins, isReady } = useStats();
+  const [activeFlower, setActiveFlower] = useState(null);
+  const [growthProgress, setGrowthProgress] = useState(0);
+  const [grownFlowers, setGrownFlowers] = useState([]);
 
+
+
+  // Load user info once
   useEffect(() => {
-    const checkUserSettings = async () => {
-      const name = await AsyncStorage.getItem('userName');
-      const storedStepGoal = await AsyncStorage.getItem('stepGoal');
-      const storedWeight = await AsyncStorage.getItem('weight');
-      if (!name || !storedStepGoal || !storedWeight) {
-        navigation.navigate('Login');
-      } else {
+    const loadUserInfo = async () => {
+      try {
+        const name = await AsyncStorage.getItem('userName');
+        const storedStepGoal = await AsyncStorage.getItem('stepGoal');
+        const storedWeight = await AsyncStorage.getItem('weight');
+        
+        if (!name || !storedStepGoal || !storedWeight) {
+          navigation.navigate('Login');
+          return;
+        }
+        
         setUserName(name);
         setStepGoal(parseInt(storedStepGoal, 10));
         setWeight(parseFloat(storedWeight));
+      } catch (error) {
+        console.error('Error loading user info:', error);
       }
-      const storedStepCount = await AsyncStorage.getItem('stepCount');
-      const storedCoins = await AsyncStorage.getItem('coins');
-      const storedDistance = await AsyncStorage.getItem('distance');
-      setStepCount(parseInt(storedStepCount, 10) || 0);
-      setCoins(parseInt(storedCoins, 10) || 0);
-      setDistance(parseFloat(storedDistance) || 0);
     };
+    
+    loadUserInfo();
+  }, []);
 
-    checkUserSettings();
-    initializePedometer();
-    registerBackgroundTask();
+  useEffect(() => {
+  const loadGardenData = async () => {
+    try {
+      const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
+      const storedGrowthProgress = await AsyncStorage.getItem('growthProgress');
+      const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
+      
+      if (storedActiveFlower) {
+        setActiveFlower(JSON.parse(storedActiveFlower));
+      }
+      
+      if (storedGrowthProgress) {
+        setGrowthProgress(parseInt(storedGrowthProgress, 10));
+      }
+      
+      if (storedGrownFlowers) {
+        setGrownFlowers(JSON.parse(storedGrownFlowers));
+      }
+    } catch (error) {
+      console.error('Error loading garden data:', error);
+    }
+  };
+  
+  loadGardenData();
+}, []);
+
+  // Initialize pedometer only once StatsContext is ready
+  useEffect(() => {
+    if (!isReady) {
+      console.log('Waiting for stats to be ready before initializing pedometer...');
+      return;
+    }
+    
+    console.log('Stats ready, initializing pedometer with step count:', stepCount);
+    const setupPedometer = async () => {
+      try {
+        await PedometerService.initializeDevice();
+        PedometerService.subscribe(handleStepDetected, stepCount);
+        registerBackgroundTask();
+      } catch (error) {
+        console.error('Error initializing pedometer:', error);
+      }
+    };
+    
+    setupPedometer();
     
     return () => {
       PedometerService.unsubscribe();
     };
-  }, []);
-
-  const initializePedometer = async () => {
-    try {
-      // Load stored step count first
-      const storedStepCount = await AsyncStorage.getItem('stepCount');
-      const storedDistance = await AsyncStorage.getItem('distance');
-      const storedCalories = await AsyncStorage.getItem('caloriesBurned');
-      
-      // Update state with stored values
-      const parsedSteps = parseInt(storedStepCount, 10) || 0;
-      setStepCount(parsedSteps);
-      setDistance(parseFloat(storedDistance) || 0);
-      setCaloriesBurned(parseFloat(storedCalories) || 0);
-      
-      // Then initialize pedometer with the loaded step count
-      await PedometerService.initializeDevice();
-      PedometerService.subscribe(handleStepDetected, parsedSteps);
-      
-      console.log('Pedometer initialized with saved step count:', parsedSteps);
-    } catch (error) {
-      console.error('Error initializing pedometer:', error);
-      // Initialize with zeros as fallback
-      await PedometerService.initializeDevice();
-      PedometerService.subscribe(handleStepDetected, 0);
-    }
-  };
+  }, [isReady, stepCount]);
 
   const handleStepDetected = () => {
     setStepCount(prevStepCount => {
@@ -88,146 +113,47 @@ function HomeScreen() {
     });
   };
 
+  // App state change handling
   useEffect(() => {
-    // Add app state change listener
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     
-    // Save stats when component unmounts (app might be closing)
     return () => {
       subscription.remove();
-      saveDailyStats();
-      console.log('HomeScreen unmounting, saving stats');
+      console.log('HomeScreen unmounting');
     };
-  }, [stepCount, caloriesBurned, distance, coins]);
+  }, []);
 
-  // App state change handler
+  // Handle app going to background/foreground
   const handleAppStateChange = async (nextAppState) => {
     // When app goes to background
     if (nextAppState.match(/inactive|background/)) {
       const currentTime = new Date().getTime();
       await AsyncStorage.setItem('appBackgroundTime', currentTime.toString());
       await AsyncStorage.setItem('backgroundStepCount', stepCount.toString());
-      
-      // Save current stats for real-time updates when app comes back
-      await saveDailyStats();
-      console.log('App entering background, saved current state');
+      console.log('App entering background, saved background time and step count');
     }
     
     // When app comes to foreground
     if (appState.match(/inactive|background/) && nextAppState === 'active') {
-      const currentDate = new Date().toISOString().split('T')[0];
-      const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+      console.log('App coming to foreground');
+      
+      // Handle background time estimation logic
       const appBackgroundTime = await AsyncStorage.getItem('appBackgroundTime');
       const backgroundStepCount = await AsyncStorage.getItem('backgroundStepCount');
       
-      // Check if we're on a new day
-      if (lastSavedDate && lastSavedDate !== currentDate) {
-        console.log(`New day detected! Last saved: ${lastSavedDate}, Today: ${currentDate}`);
-        
-        // IMPORTANT: First load the previous day's stats if they exist
-        const previousStats = await AsyncStorage.getItem('stepCount');
-        const previousCalories = await AsyncStorage.getItem('caloriesBurned');
-        const previousDistance = await AsyncStorage.getItem('distance');
-        const previousCoins = await AsyncStorage.getItem('coins');
-        
-        // Create an entry for the previous day using the last saved values
-        const previousDayStats = {
-          date: lastSavedDate,
-          stepCount: parseInt(previousStats || '0', 10),
-          caloriesBurned: parseFloat(previousCalories || '0'),
-          distance: parseFloat(previousDistance || '0'),
-          coins: parseInt(previousCoins || '0', 10)
-        };
-        
-        // Update weekly stats with the previous day's data
-        const stats = await AsyncStorage.getItem('weeklyStats');
-        const weeklyStats = stats ? JSON.parse(stats) : [];
-        
-        // Remove any existing entry for the previous day
-        const filteredStats = weeklyStats.filter(stat => stat.date !== lastSavedDate);
-        
-        // Add the previous day's stats and limit to 7 days
-        const updatedStats = [previousDayStats, ...filteredStats].slice(0, 7);
-        
-        // Save the updated weekly stats
-        await AsyncStorage.setItem('weeklyStats', JSON.stringify(updatedStats));
-        console.log(`Saved stats for previous day (${lastSavedDate}):`, previousDayStats);
-        
-        // Now reset for the new day
-        setStepCount(0);
-        setCaloriesBurned(0);
-        setDistance(0);
-        // Note: Not resetting coins as they accumulate
-        
-        // Update the last saved date to today
-        await AsyncStorage.setItem('lastSavedDate', currentDate);
-        console.log('Reset stats for new day');
-      } 
-      // If not a new day but we were in background, estimate steps
-      else if (appBackgroundTime && backgroundStepCount) {
+      if (appBackgroundTime && backgroundStepCount) {
         const currentTime = new Date().getTime();
         const backgroundTime = currentTime - parseInt(appBackgroundTime);
         const minutesInBackground = backgroundTime / (1000 * 60);
         
         if (minutesInBackground > 1) {
-          const currentStoredSteps = parseInt(await AsyncStorage.getItem('stepCount') || '0', 10);
-          const previousSteps = parseInt(backgroundStepCount, 10);
-          
-          if (currentStoredSteps > previousSteps) {
-            console.log(`Using ${currentStoredSteps - previousSteps} steps from background task`);
-            setStepCount(currentStoredSteps);
-          } else {
-            // Get stored step rate if available
-            const storedStepRate = await AsyncStorage.getItem('recentStepRate');
-            const recentStepsPerMinute = storedStepRate ? parseFloat(storedStepRate) : 12;
-            
-            const estimatedSteps = Math.round(minutesInBackground * recentStepsPerMinute * 0.5);
-            console.log(`Estimating ${estimatedSteps} steps during ${minutesInBackground.toFixed(1)} minutes in background`);
-            setStepCount(previousSteps + estimatedSteps);
-          }
+          console.log(`App was in background for ${minutesInBackground.toFixed(1)} minutes`);
         }
       }
     }
+    
     setAppState(nextAppState);
   };
-
-  const saveDailyStats = async () => {
-    try {
-      // Save current stats to AsyncStorage
-      await AsyncStorage.setItem('stepCount', stepCount.toString());
-      await AsyncStorage.setItem('caloriesBurned', caloriesBurned.toString());
-      await AsyncStorage.setItem('distance', distance.toString());
-      await AsyncStorage.setItem('coins', coins.toString());
-      
-      console.log('Daily stats saved:', { 
-        steps: stepCount, 
-        calories: caloriesBurned, 
-        distance: distance 
-      });
-    } catch (error) {
-      console.error('Error saving daily stats:', error);
-    }
-  };
-
-  // Save stats periodically
-  // Add this to your HomeScreen component
-  useEffect(() => {
-    // Save stats every 2 minutes as a safety measure
-    const saveInterval = setInterval(() => {
-      saveDailyStats();
-    }, 120000); // 2 minutes
-    
-    return () => clearInterval(saveInterval);
-  }, [stepCount, caloriesBurned, distance, coins]);
-  
-  // Save stats when steps change
-  useEffect(() => {
-    const saveTimeout = setTimeout(() => {
-      saveDailyStats();
-    }, 2000);
-    
-    return () => clearTimeout(saveTimeout);
-  }, [stepCount]);
 
   // Update calories and coins based on steps
   useEffect(() => {
@@ -236,23 +162,17 @@ function HomeScreen() {
     setCoins(Math.floor(stepCount / 100));
   }, [stepCount, weight]);
 
-  // Save stats to AsyncStorage when they change
-  useEffect(() => {
-    AsyncStorage.setItem('stepCount', stepCount.toString());
-    AsyncStorage.setItem('caloriesBurned', caloriesBurned.toString());
-    AsyncStorage.setItem('distance', distance.toString());
-    AsyncStorage.setItem('coins', coins.toString());
-  }, [stepCount, caloriesBurned, distance, coins]);
-
   const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(0), 100);
 
   const formatNumber = (number) => {
     return new Intl.NumberFormat().format(number);
   };
 
+  // Rest of your render code remains the same
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Your existing UI code */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Hello, {userName || 'User'}!</Text>
@@ -273,7 +193,6 @@ function HomeScreen() {
 
         {/* Steps Card */}
         <View style={styles.stepsCard}>
-          {/* ...existing code... */}
           <View style={styles.stepsContent}>
             <View style={styles.stepsHeader}>
               <View style={styles.stepsIcon}>
@@ -295,9 +214,8 @@ function HomeScreen() {
           </View>
         </View>
 
-        {/* Other Cards */}
+        {/* Other cards remain the same */}
         <View style={styles.otherCards}>
-          {/* ...existing code... */}
           <View style={[styles.card, styles.card01]}>
             <View style={styles.cardIcon}>
               <SvgCal width="23.44" height="30" />
@@ -323,22 +241,46 @@ function HomeScreen() {
           </View>
         </View>
 
-        {/* Flower Progress */}
+        {/* Flower progress */}
         <View style={styles.flowerCard}>
-          {/* ...existing code... */}
           <View style={styles.flowerContent}>
-            <Text style={styles.flowerTitle}>Flower progress</Text>
+            <Text style={styles.flowerTitle}>
+              {activeFlower ? activeFlower.name : 'Flower'} progress
+            </Text>
             <View style={styles.flowerProgress}>
-              <Text style={styles.flowerProgressText}>25,000 km</Text>
+              <Text style={styles.flowerProgressText}>
+                {activeFlower ? `${growthProgress}/${activeFlower.stepsToGrow} steps` : 'Loading...'}
+              </Text>
               <View style={styles.flowerProgressBar}>
                 <View
-                  style={{ width: `${Math.min((stepCount / 25000) * 100, 100)}%` }}
-                  className="bg-white h-full rounded-full"
+                  style={{ 
+                    width: activeFlower 
+                      ? `${Math.min((growthProgress / activeFlower.stepsToGrow) * 100, 100)}%` 
+                      : '0%',
+                    height: '100%',
+                    backgroundColor: 'white',
+                    borderRadius: 12,
+                  }}
                 />
               </View>
             </View>
+            <Text style={styles.flowerCollectionText}>
+              Collection: {grownFlowers.length} flowers
+            </Text>
           </View>
-          <View style={styles.flowerImage} />
+          {activeFlower && (
+            <View style={styles.flowerImage}>
+              <Image 
+                source={activeFlower.image} 
+                style={{
+                  width: '80%',
+                  height: '80%',
+                  opacity: 0.3 + (growthProgress / activeFlower.stepsToGrow) * 0.7,
+                  resizeMode: 'contain',
+                }}
+              />
+            </View>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -538,6 +480,11 @@ const styles = StyleSheet.create({
     height: '100%',
     marginLeft: 20,
     borderRadius: 15,
+  },
+  flowerCollectionText: {
+  color: 'white',
+  fontSize: 14,
+  marginTop: 10,
   },
 });
 

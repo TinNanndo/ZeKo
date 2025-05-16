@@ -38,7 +38,6 @@ const Tab = createBottomTabNavigator();
 
 export default function TabNavigator() {
   return (
-    <StatsProvider> 
       <View style={styles.container}>
         <Tab.Navigator
           screenOptions={({ route }) => ({
@@ -123,6 +122,5 @@ export default function TabNavigator() {
             />
         </Tab.Navigator>
       </View>
-    </StatsProvider>
   );
 }

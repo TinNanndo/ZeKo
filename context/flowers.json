@@ -1,0 +1,44 @@
+{
+  "flowers": [
+    {
+      "id": "rose",
+      "name": "Rose",
+      "stepsToGrow": 5000,
+      "imagePath": "rose.png",
+      "rarity": "common",
+      "description": "A classic symbol of love and beauty"
+    },
+    {
+      "id": "tulip",
+      "name": "Tulip",
+      "stepsToGrow": 10000,
+      "imagePath": "tulip.png",
+      "rarity": "common",
+      "description": "A vibrant spring flower"
+    },
+    {
+      "id": "sunflower",
+      "name": "Sunflower", 
+      "stepsToGrow": 15000,
+      "imagePath": "sunflower.png",
+      "rarity": "uncommon",
+      "description": "A tall flower that follows the sun"
+    },
+    {
+      "id": "lily",
+      "name": "Lily",
+      "stepsToGrow": 20000,
+      "imagePath": "lily.png",
+      "rarity": "uncommon",
+      "description": "An elegant flower with a pleasant fragrance"
+    },
+    {
+      "id": "orchid",
+      "name": "Orchid",
+      "stepsToGrow": 25000,
+      "imagePath": "orchid.png",
+      "rarity": "rare",
+      "description": "A delicate and exotic bloom"
+    }
+  ]
+}

@@ -4,41 +4,97 @@
       "id": "rose",
       "name": "Rose",
       "stepsToGrow": 5000,
-      "imagePath": "rose.png",
+      "imagePath": "1.png",
       "rarity": "common",
       "description": "A classic symbol of love and beauty"
     },
     {
       "id": "tulip",
       "name": "Tulip",
-      "stepsToGrow": 10000,
-      "imagePath": "tulip.png",
+      "stepsToGrow": 7500,
+      "imagePath": "2.png",
       "rarity": "common",
       "description": "A vibrant spring flower"
     },
     {
-      "id": "sunflower",
-      "name": "Sunflower", 
-      "stepsToGrow": 15000,
-      "imagePath": "sunflower.png",
-      "rarity": "uncommon",
-      "description": "A tall flower that follows the sun"
+      "id": "daisy",
+      "name": "Daisy", 
+      "stepsToGrow": 6000,
+      "imagePath": "3.png",
+      "rarity": "common",
+      "description": "A simple yet charming flower with white petals"
     },
     {
       "id": "lily",
       "name": "Lily",
-      "stepsToGrow": 20000,
-      "imagePath": "lily.png",
+      "stepsToGrow": 10000,
+      "imagePath": "4.png",
       "rarity": "uncommon",
       "description": "An elegant flower with a pleasant fragrance"
     },
     {
+      "id": "sunflower",
+      "name": "Sunflower",
+      "stepsToGrow": 12000,
+      "imagePath": "5.png",
+      "rarity": "uncommon",
+      "description": "A tall flower that follows the sun"
+    },
+    {
+      "id": "bluebell",
+      "name": "Bluebell",
+      "stepsToGrow": 8500,
+      "imagePath": "6.png",
+      "rarity": "uncommon",
+      "description": "A delicate woodland flower with bell-shaped blooms"
+    },
+    {
       "id": "orchid",
       "name": "Orchid",
-      "stepsToGrow": 25000,
-      "imagePath": "orchid.png",
+      "stepsToGrow": 15000,
+      "imagePath": "7.png",
       "rarity": "rare",
       "description": "A delicate and exotic bloom"
+    },
+    {
+      "id": "cherry_blossom",
+      "name": "Cherry Blossom",
+      "stepsToGrow": 18000,
+      "imagePath": "8.png",
+      "rarity": "rare",
+      "description": "A beautiful pink flower that symbolizes spring and renewal"
+    },
+    {
+      "id": "lotus",
+      "name": "Lotus",
+      "stepsToGrow": 20000,
+      "imagePath": "9.png",
+      "rarity": "rare",
+      "description": "A sacred flower that symbolizes purity and enlightenment"
+    },
+    {
+      "id": "hibiscus",
+      "name": "Hibiscus",
+      "stepsToGrow": 16000,
+      "imagePath": "10.png",
+      "rarity": "rare",
+      "description": "A tropical flower with vibrant colors"
+    },
+    {
+      "id": "daffodil",
+      "name": "Daffodil",
+      "stepsToGrow": 9000,
+      "imagePath": "11.png",
+      "rarity": "uncommon",
+      "description": "A cheerful spring flower symbolizing new beginnings"
+    },
+    {
+      "id": "peony",
+      "name": "Peony",
+      "stepsToGrow": 25000,
+      "imagePath": "12.png",
+      "rarity": "legendary",
+      "description": "A lush, fragrant flower representing prosperity and honor"
     }
   ]
 }

@@ -13,7 +13,6 @@ export const StatsProvider = ({ children }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-
   // Load initial stats
   useEffect(() => {
     const loadStats = async () => {
@@ -53,6 +52,12 @@ export const StatsProvider = ({ children }) => {
 
     loadStats();
   }, []);
+
+  // Function to update coins and persist the change
+  const updateCoins = (newAmount) => {
+    setCoins(newAmount);
+    AsyncStorage.setItem('coins', newAmount.toString());
+  };
 
   // Save current stats to AsyncStorage
   useEffect(() => {
@@ -154,7 +159,7 @@ export const StatsProvider = ({ children }) => {
         distance,
         setDistance,
         coins,
-        setCoins,
+        setCoins: updateCoins, // Use the updateCoins function for setCoins
         weeklyHistory,
         resetDailyStats,
         saveCurrentStatsToHistory,

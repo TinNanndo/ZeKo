@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, SafeAreaView, AppState, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { Text, View, AppState, StyleSheet, Image, Dimensions, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
+import { FLOWER_TYPES } from '../context/flowerData';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 // Custom modules
 import PedometerService, { STEP_LENGTH } from '../utils/PedometerService';
@@ -14,7 +16,10 @@ import SvgNotif from '../assets/icons/notif.svg';
 import SvgSteps from '../assets/icons/steps.svg';
 import SvgCal from '../assets/icons/cal.svg';
 import SvgDist from '../assets/icons/dist.svg';
+import SvgShop from '../assets/icons/shop.svg';
 import CircularProgress from '../utils/CircularProgress';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 function HomeScreen() {
   const navigation = useNavigation();
@@ -26,8 +31,7 @@ function HomeScreen() {
   const [activeFlower, setActiveFlower] = useState(null);
   const [growthProgress, setGrowthProgress] = useState(0);
   const [grownFlowers, setGrownFlowers] = useState([]);
-
-
+  const [dimensions, setDimensions] = useState({screen: Dimensions.get('window')});
 
   // Load user info once
   useEffect(() => {
@@ -53,31 +57,88 @@ function HomeScreen() {
     loadUserInfo();
   }, []);
 
-  useEffect(() => {
   const loadGardenData = async () => {
-    try {
-      const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
-      const storedGrowthProgress = await AsyncStorage.getItem('growthProgress');
-      const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
-      
-      if (storedActiveFlower) {
-        setActiveFlower(JSON.parse(storedActiveFlower));
+      try {
+        console.log('Loading garden data in Home screen');
+        const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
+        const storedGrowthProgress = await AsyncStorage.getItem('growthProgress');
+        const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
+        
+        if (storedGrowthProgress) {
+          const progress = parseInt(storedGrowthProgress, 10) || 0;
+          setGrowthProgress(progress);
+          console.log('Loaded growth progress:', progress);
+        }
+        
+        if (storedGrownFlowers) {
+          setGrownFlowers(JSON.parse(storedGrownFlowers));
+        }
+        
+        // Load active flower directly from AsyncStorage to ensure it matches GardenScreen
+        if (storedActiveFlower && storedActiveFlower !== 'null') {
+          const flower = JSON.parse(storedActiveFlower);
+          setActiveFlower(flower);
+          console.log('Loaded active flower:', flower.name, 
+            flower.instanceId ? `(Instance: ${flower.instanceNumber})` : '');
+        } else {
+          // Code for handling no active flower remains the same
+          console.log('No active flower found in storage');
+          // ...existing code...
+        }
+      } catch (error) {
+        console.error('Error loading garden data:', error);
+        setActiveFlower(null);
       }
+    };
+
+  useEffect(() => {
+    loadGardenData();
+  }, []);
+
+    useFocusEffect(
+    React.useCallback(() => {
+      const reloadData = async () => {
+        console.log('Home screen focused, reloading garden data');
+        await loadGardenData();
+      };
       
-      if (storedGrowthProgress) {
-        setGrowthProgress(parseInt(storedGrowthProgress, 10));
-      }
-      
-      if (storedGrownFlowers) {
-        setGrownFlowers(JSON.parse(storedGrownFlowers));
-      }
-    } catch (error) {
-      console.error('Error loading garden data:', error);
-    }
-  };
+      reloadData();
+      return () => {}; // cleanup function
+    }, [])
+  );
   
-  loadGardenData();
-}, []);
+  // Update the flower progress useEffect to sync with GardenScreen
+  useEffect(() => {
+    if (!activeFlower) return;
+    
+    const updateFlowerProgress = async () => {
+      try {
+        const lastTrackedStep = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
+        if (stepCount <= lastTrackedStep) return;
+        
+        // Only update from Home screen if we have steps not yet tracked
+        const stepsSinceLastUpdate = stepCount - lastTrackedStep;
+        if (stepsSinceLastUpdate > 0) {
+          const newProgress = growthProgress + stepsSinceLastUpdate;
+          setGrowthProgress(newProgress);
+          
+          // Save updated progress in AsyncStorage
+          await AsyncStorage.setItem('growthProgress', newProgress.toString());
+          await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+          
+          // Check if flower is fully grown but don't handle it here,
+          // let the GardenScreen handle this logic to ensure consistency
+          if (newProgress >= activeFlower.stepsToGrow) {
+            console.log('Flower has reached full growth! Visit Garden to see it bloom.');
+          }
+        }
+      } catch (error) {
+        console.error('Error updating flower progress:', error);
+      }
+    };
+    
+    updateFlowerProgress();
+  }, [stepCount, activeFlower]);
 
   // Initialize pedometer only once StatsContext is ready
   useEffect(() => {
@@ -115,12 +176,11 @@ function HomeScreen() {
 
   // App state change handling
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions({ screen: window });
+    });
     
-    return () => {
-      subscription.remove();
-      console.log('HomeScreen unmounting');
-    };
+    return () => subscription?.remove();
   }, []);
 
   // Handle app going to background/foreground
@@ -193,21 +253,21 @@ function HomeScreen() {
 
         {/* Steps Card */}
         <View style={styles.stepsCard}>
-          <View style={styles.stepsContent}>
+          <View style={styles.stepsLeftColumn}>
             <View style={styles.stepsHeader}>
               <View style={styles.stepsIcon}>
                 <SvgSteps width="27.27" height="30" />
               </View>
               <Text style={styles.stepsTitle}>Steps</Text>
             </View>
-
+        
             <View style={styles.stepsProgress}>
               <CircularProgress percentage={percentage} />
               <Text style={styles.stepsPercentage}>{percentage}%</Text>
             </View>
           </View>
-
-          <View style={styles.stepsCountContainer}>
+        
+          <View style={styles.stepsRightColumn}>
             <Text style={styles.stepsCount}>{formatNumber(stepCount)}</Text>
             <View style={styles.stepsDivider} />
             <Text style={styles.stepsGoal}>{formatNumber(stepGoal)}</Text>
@@ -242,33 +302,39 @@ function HomeScreen() {
         </View>
 
         {/* Flower progress */}
-        <View style={styles.flowerCard}>
+        <View style={[styles.flowerCard, { height: dimensions.screen.height * 0.25 }]}>
           <View style={styles.flowerContent}>
             <Text style={styles.flowerTitle}>
-              {activeFlower ? activeFlower.name : 'Flower'} progress
+              Flower progress
             </Text>
             <View style={styles.flowerProgress}>
-              <Text style={styles.flowerProgressText}>
-                {activeFlower ? `${growthProgress}/${activeFlower.stepsToGrow} steps` : 'Loading...'}
-              </Text>
-              <View style={styles.flowerProgressBar}>
-                <View
-                  style={{ 
-                    width: activeFlower 
-                      ? `${Math.min((growthProgress / activeFlower.stepsToGrow) * 100, 100)}%` 
-                      : '0%',
-                    height: '100%',
-                    backgroundColor: 'white',
-                    borderRadius: 12,
-                  }}
-                />
-              </View>
+              {activeFlower ? (
+                <>
+                  <Text style={styles.flowerProgressText}>
+                    {`${growthProgress}/${activeFlower.stepsToGrow} steps`}
+                  </Text>
+                  <View style={styles.flowerProgressBar}>
+                    <View
+                      style={{ 
+                        width: `${Math.min((growthProgress / activeFlower.stepsToGrow) * 100, 100)}%`,
+                        height: '100%',
+                        backgroundColor: 'white',
+                        borderRadius: 12,
+                      }}
+                    />
+                  </View>
+                </>
+              ) : (
+                <View style={styles.noFlowerMessage}>
+                  <Text style={styles.noFlowerText}>
+                    No active flower yet. Visit the shop to buy your first flower!
+                  </Text>
+                </View>
+              )}
             </View>
-            <Text style={styles.flowerCollectionText}>
-              Collection: {grownFlowers.length} flowers
-            </Text>
           </View>
-          {activeFlower && (
+          
+          {activeFlower ? (
             <View style={styles.flowerImage}>
               <Image 
                 source={activeFlower.image} 
@@ -279,6 +345,16 @@ function HomeScreen() {
                   resizeMode: 'contain',
                 }}
               />
+            </View>
+          ) : (
+            <View style={styles.shopButtonContainer}>
+              <TouchableOpacity 
+                style={styles.shopButton}
+                onPress={() => navigation.navigate('Shop')}
+              >
+                <Text style={styles.shopButtonText}>Shop</Text>
+                <SvgShop width={20} height={20} />
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -338,69 +414,76 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  stepsCard: {
-    backgroundColor: '#1E3123',
-    borderRadius: 15,
-    padding: 20,
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
-    elevation: 5,
-  },
-  stepsContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  stepsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stepsIcon: {
-    backgroundColor: '#2E4834',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepsTitle: {
-    color: 'white',
-    fontSize: 24,
-    marginLeft: 20,
-  },
-  stepsProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stepsPercentage: {
-    color: 'white',
-    fontSize: 24,
-    marginLeft: 20,
-  },
-  stepsCountContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  stepsCount: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  stepsDivider: {
-    height: 1,
-    backgroundColor: 'white',
-    borderRadius: 1,
-    width: 76.28,
-    transform: [{ rotate: '-34.32deg' }],
-  },
-  stepsGoal: {
-    color: 'white',
-    fontSize: 24,
-  },
+stepsCard: {
+  flexDirection: 'row',
+  backgroundColor: '#1E3123',
+  borderRadius: 15,
+  padding: 20,
+  marginTop: 20,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 5,
+  justifyContent: 'space-between',
+},
+stepsLeftColumn: {
+  flex: 1,
+  justifyContent: 'space-between',
+},
+stepsRightColumn: {
+  justifyContent: 'center',
+  alignItems: 'flex-end',
+  marginRight: 50,
+
+},
+stepsHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginBottom: 20, // Add spacing below the header
+},
+stepsIcon: {
+  backgroundColor: '#2E4834',
+  width: 56,
+  height: 56,
+  borderRadius: 28,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+stepsTitle: {
+  color: 'white',
+  fontSize: 20,
+  marginLeft: 20,
+},
+stepsProgress: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 15, // Add spacing above the progress
+},
+stepsPercentage: {
+  color: 'white',
+  fontSize: 20  ,
+  marginLeft: 20,
+},
+stepsCount: {
+  color: 'white',
+  fontSize: 22,
+  fontWeight: 'bold',
+  marginRight: 50,
+},
+stepsDivider: {
+  height: 1,
+  backgroundColor: 'white',
+  borderRadius: 1,
+  width: 76.28,
+  transform: [{ rotate: '-34.32deg' }],
+},
+stepsGoal: {
+  color: 'white',
+  fontSize: 22,
+  marginTop: -5,
+  marginRight: -50,
+},
   otherCards: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -440,19 +523,19 @@ const styles = StyleSheet.create({
   cardValueBold: {
     fontWeight: 'bold',
   },
-  flowerCard: {
-    backgroundColor: '#1E3123',
-    borderRadius: 15,
-    padding: 20,
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
-    elevation: 5,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+flowerCard: {
+  backgroundColor: '#1E3123',
+  borderRadius: 15,
+  padding: 20,
+  marginTop: 20,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 5,
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+},
   flowerContent: {
     flex: 1,
   },
@@ -461,31 +544,65 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   flowerProgress: {
-    marginTop: 20,
-  },
+    marginTop: 30,
+    justifyContent: 'flex-end',
+},
   flowerProgressText: {
     color: 'white',
     fontSize: 12,
     textAlign: 'right',
   },
-  flowerProgressBar: {
-    backgroundColor: '#2E4834',
-    height: 24,
-    borderRadius: 12,
-    marginTop: 10,
-  },
-  flowerImage: {
-    backgroundColor: '#2E4834',
-    width: '50%',
-    height: '100%',
-    marginLeft: 20,
-    borderRadius: 15,
-  },
+flowerProgressBar: {
+  backgroundColor: '#2E4834',
+  height: 20, // This line is missing
+  borderRadius: 12,
+  marginTop: 10,
+  overflow: 'hidden', // This is also recommended
+},
+flowerImage: {
+  backgroundColor: '#2E4834',
+  width: '45%', // Slightly reduced from 50%
+  height: '100%',
+  marginLeft: 20,
+  borderRadius: 15,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
   flowerCollectionText: {
   color: 'white',
   fontSize: 14,
   marginTop: 10,
   },
+            noFlowerMessage: {
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 20,
+          },
+          noFlowerText: {
+            color: 'white',
+            fontSize: 14,
+            textAlign: 'center',
+            marginBottom: 10,
+          },
+          shopButtonContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+          shopButton: {
+            flexDirection: 'row',
+            backgroundColor: '#4CAF50',
+            paddingVertical: 10,
+            paddingHorizontal: 20,
+            borderRadius: 20,
+            alignItems: 'center',
+          },
+          shopButtonText: {
+            color: 'white',
+            fontSize: 16,
+            fontWeight: 'bold',
+            marginRight: 8,
+          },
 });
 
 export default HomeScreen;

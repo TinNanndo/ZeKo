@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useStats } from '../context/StatsContext';
@@ -25,14 +26,15 @@ export default function ProfileScreen() {
   };
 
   const resetSteps = async () => {
-    setStepCount(4563); // Reset step count to 0
-    setCoins(0); // Reset coins when steps are reset
+    setStepCount(5000); // Reset step count to 0
+    setCoins(10000); // Reset coins when steps are reset
     await AsyncStorage.setItem('stepCount', '0'); // Persist reset step count
     await AsyncStorage.setItem('coins', '0'); // Persist reset coins
     console.log('Step Count reset to 0'); // Log reset action to terminal
   };
 
   return (
+    <SafeAreaView style={styles.safeArea}>
     <View style={styles.container}>
       <Text style={styles.title}>Profile</Text>
       <Text style={styles.stats}>Steps: {stepCount}</Text>
@@ -46,10 +48,15 @@ export default function ProfileScreen() {
         <Text style={styles.buttonText}>Logout</Text>
       </TouchableOpacity>
     </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+    safeArea: {
+    flex: 1,
+    backgroundColor: '#2E4834',
+  },
   container: {
     flex: 1,
     backgroundColor: '#2E4834',

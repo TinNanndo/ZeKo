@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, SafeAreaView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
+import { FLOWER_TYPES } from '../context/flowerData';
+import { useFocusEffect } from '@react-navigation/native';
 import RectProgress from '../utils/RectProgress';
 
 export default function StatsScreen() {
@@ -17,7 +20,73 @@ export default function StatsScreen() {
     weeklyHistory  // Add this to access history from context
   } = useStats();
   const [isLoading, setIsLoading] = useState(true);
+
+  const [flowersCollected, setFlowersCollected] = useState(0);
+  const [flowersGrown, setFlowersGrown] = useState(0); 
+  const [totalFlowerTypes, setTotalFlowerTypes] = useState(0);
+
+    // Add this new useEffect to load flower stats
+  useEffect(() => {
+    const loadFlowerStats = async () => {
+      try {
+        // Load collected flowers data
+        const shopPurchasesString = await AsyncStorage.getItem('shopPurchases');
+        const grownFlowersString = await AsyncStorage.getItem('grownFlowers');
+        
+        // Get total flower types from the flower data
+        const totalTypes = FLOWER_TYPES.length;
+        setTotalFlowerTypes(totalTypes);
+        
+        // Calculate flowers collected (purchased)
+        if (shopPurchasesString) {
+          const purchases = JSON.parse(shopPurchasesString);
+          setFlowersCollected(purchases.length);
+        }
+        
+        // Calculate flowers grown
+        if (grownFlowersString) {
+          const grown = JSON.parse(grownFlowersString);
+          setFlowersGrown(grown.length);
+        }
+        
+        console.log('Loaded flower stats - Collected:', flowersCollected, 'Grown:', flowersGrown);
+      } catch (error) {
+        console.error('Error loading flower stats:', error);
+      }
+    };
+    
+    loadFlowerStats();
+  }, []); // Run once on component mount
   
+  // Add a useFocusEffect to reload flower stats when the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const reloadFlowerStats = async () => {
+        try {
+          const shopPurchasesString = await AsyncStorage.getItem('shopPurchases');
+          const grownFlowersString = await AsyncStorage.getItem('grownFlowers');
+          
+          if (shopPurchasesString) {
+            const purchases = JSON.parse(shopPurchasesString);
+            setFlowersCollected(purchases.length);
+          }
+          
+          if (grownFlowersString) {
+            const grown = JSON.parse(grownFlowersString);
+            setFlowersGrown(grown.length);
+          }
+          
+          console.log('Reloaded flower stats on focus');
+        } catch (error) {
+          console.error('Error reloading flower stats:', error);
+        }
+      };
+      
+      reloadFlowerStats();
+      return () => {}; // cleanup function
+    }, [])
+  );
+
   useEffect(() => {
     const fetchWeeklyStats = async () => {
       try {
@@ -346,18 +415,20 @@ const logAvailableDates = () => {
           </View>
         </View>
 
-        {/* Flower Stats */}
-        <View style={styles.flowerCard}>
-          <Text style={styles.flowerTitle}>Flower Stats</Text>
-          <View style={styles.flowerContent}>
-            <Text style={styles.flowerText}>
-              Flower collected: <Text style={styles.boldText}>20 / 103</Text>
+      {/* Flower Stats */}
+      <View style={styles.flowerCard}>
+        <Text style={styles.flowerTitle}>Flower Stats</Text>
+        <View style={styles.flowerContent}>
+          <Text style={styles.flowerText}>
+            Flowers collected: <Text style={styles.boldText}>
+              {flowersCollected} / {totalFlowerTypes}
             </Text>
-            <Text style={styles.flowerText}>
-              Flower grown: <Text style={styles.boldText}>20</Text>
-            </Text>
-          </View>
+          </Text>
+          <Text style={styles.flowerText}>
+            Flowers grown: <Text style={styles.boldText}>{flowersGrown}</Text>
+          </Text>
         </View>
+      </View>
       </View>
     </SafeAreaView>
   );

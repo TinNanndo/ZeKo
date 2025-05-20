@@ -24,72 +24,98 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 function HomeScreen() {
   const navigation = useNavigation();
   const [userName, setUserName] = useState('');
-  const [stepGoal, setStepGoal] = useState(10000);
   const [weight, setWeight] = useState(70);
   const [appState, setAppState] = useState(AppState.currentState);
-  const { stepCount, setStepCount, caloriesBurned, setCaloriesBurned, distance, setDistance, coins, setCoins, isReady } = useStats();
-  const [activeFlower, setActiveFlower] = useState(null);
+  const { 
+    stepCount, 
+    setStepCount, 
+    caloriesBurned, 
+    setCaloriesBurned, 
+    distance, 
+    setDistance, 
+    coins, 
+    setCoins, 
+    stepGoal, 
+    isReady 
+  } = useStats();  const [activeFlower, setActiveFlower] = useState(null);
   const [growthProgress, setGrowthProgress] = useState(0);
   const [grownFlowers, setGrownFlowers] = useState([]);
   const [dimensions, setDimensions] = useState({screen: Dimensions.get('window')});
+  const prevStepCount = React.useRef(0);
 
-  // Load user info once
-  useEffect(() => {
-    const loadUserInfo = async () => {
-      try {
-        const name = await AsyncStorage.getItem('userName');
-        const storedStepGoal = await AsyncStorage.getItem('stepGoal');
-        const storedWeight = await AsyncStorage.getItem('weight');
-        
-        if (!name || !storedStepGoal || !storedWeight) {
-          navigation.navigate('Login');
-          return;
-        }
-        
-        setUserName(name);
-        setStepGoal(parseInt(storedStepGoal, 10));
-        setWeight(parseFloat(storedWeight));
-      } catch (error) {
-        console.error('Error loading user info:', error);
+
+  // Move this function definition to the top of your component
+  const loadUserInfo = async () => {
+    try {
+      const name = await AsyncStorage.getItem('userName');
+      const storedWeight = await AsyncStorage.getItem('weight');
+      
+      if (!name) {
+        console.log('No user name found, redirecting to login');
+        navigation.navigate('Login');
+        return;
       }
-    };
-    
+      
+      setUserName(name);
+      if (storedWeight) setWeight(parseFloat(storedWeight));
+      
+      console.log('User info loaded:', { name, weight: storedWeight });
+    } catch (error) {
+      console.error('Error loading user info:', error);
+    }
+  };
+  
+  // Then update your existing useEffect to use this function
+  useEffect(() => {
     loadUserInfo();
   }, []);
 
+  // Modify the loadGardenData function in HomeScreen.js
+  
   const loadGardenData = async () => {
-      try {
-        console.log('Loading garden data in Home screen');
-        const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
-        const storedGrowthProgress = await AsyncStorage.getItem('growthProgress');
-        const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
-        
-        if (storedGrowthProgress) {
-          const progress = parseInt(storedGrowthProgress, 10) || 0;
-          setGrowthProgress(progress);
-          console.log('Loaded growth progress:', progress);
-        }
-        
-        if (storedGrownFlowers) {
-          setGrownFlowers(JSON.parse(storedGrownFlowers));
-        }
-        
-        // Load active flower directly from AsyncStorage to ensure it matches GardenScreen
-        if (storedActiveFlower && storedActiveFlower !== 'null') {
-          const flower = JSON.parse(storedActiveFlower);
-          setActiveFlower(flower);
-          console.log('Loaded active flower:', flower.name, 
-            flower.instanceId ? `(Instance: ${flower.instanceNumber})` : '');
-        } else {
-          // Code for handling no active flower remains the same
-          console.log('No active flower found in storage');
-          // ...existing code...
-        }
-      } catch (error) {
-        console.error('Error loading garden data:', error);
-        setActiveFlower(null);
+    try {
+      console.log('Loading garden data in Home screen');
+      const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
+      const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
+      const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
+      
+      // Parse the flower progress map
+      let progressMap = {};
+      if (storedFlowerProgress) {
+        progressMap = JSON.parse(storedFlowerProgress);
       }
-    };
+      
+      if (storedGrownFlowers) {
+        setGrownFlowers(JSON.parse(storedGrownFlowers));
+      }
+      
+      // Load active flower and its specific progress
+      if (storedActiveFlower && storedActiveFlower !== 'null') {
+        const flower = JSON.parse(storedActiveFlower);
+        setActiveFlower(flower);
+        
+        // Get the specific progress for this flower using its instanceId
+        if (flower.instanceId && progressMap[flower.instanceId] !== undefined) {
+          setGrowthProgress(progressMap[flower.instanceId]);
+          console.log(`Loaded progress for ${flower.name}: ${progressMap[flower.instanceId]} steps`);
+        } else {
+          // Default to 0 if no progress is saved for this flower
+          setGrowthProgress(0);
+          console.log(`No progress found for ${flower.name}, defaulting to 0`);
+        }
+        
+        console.log('Loaded active flower:', flower.name, 
+          flower.instanceId ? `(Instance: ${flower.instanceNumber})` : '');
+      } else {
+        console.log('No active flower found in storage');
+        setActiveFlower(null);
+        setGrowthProgress(0);
+      }
+    } catch (error) {
+      console.error('Error loading garden data:', error);
+      setActiveFlower(null);
+    }
+  };
 
   useEffect(() => {
     loadGardenData();
@@ -106,39 +132,79 @@ function HomeScreen() {
       return () => {}; // cleanup function
     }, [])
   );
+
+    // Add this inside your HomeScreen function, after other useFocusEffect hooks
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadUserInfo = async () => {
+        try {
+          const name = await AsyncStorage.getItem('userName');
+          // Remove this line:
+          // const storedStepGoal = await AsyncStorage.getItem('stepGoal');
+          const storedWeight = await AsyncStorage.getItem('weight');
+          
+          if (name) setUserName(name);
+          // Remove this line:
+          // if (storedStepGoal) setStepGoal(parseInt(storedStepGoal, 10));
+          if (storedWeight) setWeight(parseFloat(storedWeight));
+          
+          console.log('Refreshed user profile data in HomeScreen');
+        } catch (error) {
+          console.error('Error refreshing user info:', error);
+        }
+      };
+      
+      loadUserInfo();
+      return () => {};
+    }, [])
+  );
   
-  // Update the flower progress useEffect to sync with GardenScreen
+  // Update your flower progress useEffect to be more reactive
   useEffect(() => {
     if (!activeFlower) return;
     
-    const updateFlowerProgress = async () => {
+    const syncFlowerProgress = async () => {
       try {
-        const lastTrackedStep = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
-        if (stepCount <= lastTrackedStep) return;
+        // Always check the latest growth progress from storage to 
+        // stay in sync with GardenScreen
+      const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
+      if (storedFlowerProgress) {
+        const progressMap = JSON.parse(storedFlowerProgress);
         
-        // Only update from Home screen if we have steps not yet tracked
+        // Get the progress specific to this flower
+        if (activeFlower.instanceId && progressMap[activeFlower.instanceId] !== undefined) {
+          const newProgress = progressMap[activeFlower.instanceId];
+          if (newProgress !== growthProgress) {
+            console.log(`Updating flower progress for ${activeFlower.name}: ${newProgress} steps`);
+            setGrowthProgress(newProgress);
+          }
+        }
+      }
+        
+        // Rest of your existing flower progress update code
+      const lastTrackedStep = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
+      if (stepCount <= lastTrackedStep) return;
+        
         const stepsSinceLastUpdate = stepCount - lastTrackedStep;
         if (stepsSinceLastUpdate > 0) {
           const newProgress = growthProgress + stepsSinceLastUpdate;
           setGrowthProgress(newProgress);
           
-          // Save updated progress in AsyncStorage
           await AsyncStorage.setItem('growthProgress', newProgress.toString());
           await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
           
-          // Check if flower is fully grown but don't handle it here,
-          // let the GardenScreen handle this logic to ensure consistency
           if (newProgress >= activeFlower.stepsToGrow) {
             console.log('Flower has reached full growth! Visit Garden to see it bloom.');
           }
         }
+        await loadGardenData();
       } catch (error) {
-        console.error('Error updating flower progress:', error);
+        console.error('Error syncing flower progress:', error);
       }
     };
     
-    updateFlowerProgress();
-  }, [stepCount, activeFlower]);
+    syncFlowerProgress();
+  }, [stepCount, activeFlower, growthProgress]);
 
   // Initialize pedometer only once StatsContext is ready
   useEffect(() => {
@@ -165,22 +231,43 @@ function HomeScreen() {
     };
   }, [isReady, stepCount]);
 
-  const handleStepDetected = () => {
-    setStepCount(prevStepCount => {
-      const newStepCount = prevStepCount + 1;
-      const newDistance = (newStepCount * STEP_LENGTH) / 1000;
-      setDistance(newDistance);
-      return newStepCount;
-    });
-  };
+const handleStepDetected = () => {
+  setStepCount(prevStepCount => {
+    const newStepCount = prevStepCount + 1;
+    // Distance calculation now handled in StatsContext
+    return newStepCount;
+  });
+};
 
-  // App state change handling
+  // Update your existing app state useEffect
   useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setDimensions({ screen: window });
-    });
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
     
-    return () => subscription?.remove();
+    return () => {
+      subscription.remove();
+    };
+  }, [appState, stepCount]); // Add stepCount as a dependency
+
+    // Add this after your other useEffect hooks
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      // Reload garden data to check for changes from other screens
+      loadGardenData();
+      
+      // Also check for updated weight that may affect calculations
+      const checkProfileUpdates = async () => {
+        
+        const storedWeight = await AsyncStorage.getItem('weight');
+        if (storedWeight) {
+          const parsedWeight = parseFloat(storedWeight);
+          if (parsedWeight !== weight) setWeight(parsedWeight);
+        }
+      };
+      
+      checkProfileUpdates();
+    }, 5000);
+    
+    return () => clearInterval(refreshInterval);
   }, []);
 
   // Handle app going to background/foreground
@@ -215,12 +302,46 @@ function HomeScreen() {
     setAppState(nextAppState);
   };
 
-  // Update calories and coins based on steps
-  useEffect(() => {
-    const newCaloriesBurned = PedometerService.calculateCaloriesBurned(stepCount, weight);
-    setCaloriesBurned(newCaloriesBurned);
-    setCoins(Math.floor(stepCount / 100));
-  }, [stepCount, weight]);
+useEffect(() => {
+  // Update calories based on all steps
+  const newCaloriesBurned = PedometerService.calculateCaloriesBurned(stepCount, weight);
+  setCaloriesBurned(newCaloriesBurned);
+  
+  // Update the ref value here
+  prevStepCount.current = stepCount;
+}, [stepCount, weight]);
+
+// Add this new effect to handle step changes for coin calculation
+useEffect(() => {
+  const handleStepCountChange = async () => {
+    try {
+      // Get the last step count we used for coins
+      const lastCoinStepCount = parseInt(await AsyncStorage.getItem('lastCoinStepCount') || '0', 10);
+      
+      // If we have more steps now, add coins just for the difference
+      if (stepCount > lastCoinStepCount) {
+        const additionalSteps = stepCount - lastCoinStepCount;
+        const newCoins = Math.floor(additionalSteps / 100);
+        
+        if (newCoins > 0) {
+          setCoins(prevCoins => {
+            const updatedCoins = prevCoins + newCoins;
+            AsyncStorage.setItem('coins', updatedCoins.toString());
+            return updatedCoins;
+          });
+          
+          // Update the last step count we used for coins
+          await AsyncStorage.setItem('lastCoinStepCount', stepCount.toString());
+          console.log(`Added ${newCoins} coins from ${additionalSteps} new steps`);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating coins from steps:', error);
+    }
+  };
+  
+  handleStepCountChange();
+}, [stepCount]);
 
   const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(0), 100);
 
@@ -294,9 +415,9 @@ function HomeScreen() {
             </View>
             <View style={styles.cardContent}>
               <Text style={styles.cardTitle}>Distance</Text>
-              <Text style={styles.cardValue}>
-                <Text style={styles.cardValueBold}>{distance.toFixed(1)}</Text> km
-              </Text>
+                <Text style={styles.cardValue}>
+                  <Text style={styles.cardValueBold}>{distance.toFixed(2)}</Text> km
+                </Text>
             </View>
           </View>
         </View>
@@ -347,7 +468,7 @@ function HomeScreen() {
               />
             </View>
           ) : (
-            <View style={styles.shopButtonContainer}>
+            <View style={styles.flowerImage}>
               <TouchableOpacity 
                 style={styles.shopButton}
                 onPress={() => navigation.navigate('Shop')}
@@ -371,7 +492,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 20,
+    padding: 15,
   },
   header: {
     flexDirection: 'row',
@@ -384,13 +505,13 @@ const styles = StyleSheet.create({
   },
   welcome: {
     color: 'white',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
   },
   coinsContainer: {
     backgroundColor: '#1E3123',
     width: 112,
-    height: 56,
+    height: 50,
     padding: 8,
     borderRadius: 24,
     justifyContent: 'center',
@@ -407,8 +528,8 @@ const styles = StyleSheet.create({
   },
   notificationContainer: {
     backgroundColor: '#1E3123',
-    width: 56,
-    height: 56,
+    width: 50,
+    height: 50,
     padding: 20,
     borderRadius: 28,
     justifyContent: 'center',
@@ -419,7 +540,7 @@ stepsCard: {
   backgroundColor: '#1E3123',
   borderRadius: 15,
   padding: 20,
-  marginTop: 20,
+  marginTop: 15,
   shadowColor: '#000',
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.8,
@@ -591,7 +712,7 @@ flowerImage: {
           },
           shopButton: {
             flexDirection: 'row',
-            backgroundColor: '#4CAF50',
+            backgroundColor: '#1E3123',
             paddingVertical: 10,
             paddingHorizontal: 20,
             borderRadius: 20,

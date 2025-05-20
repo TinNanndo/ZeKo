@@ -97,11 +97,15 @@ export default function LoginScreen() {
           style={styles.picker}
           onValueChange={(itemValue) => setStepGoal(itemValue)}
         >
-          <Picker.Item label="10,000 steps" value="10000" />
-          <Picker.Item label="7,500 steps" value="7500" />
-          <Picker.Item label="5,000 steps" value="5000" />
-          <Picker.Item label="2,500 steps" value="2500" />
+          <Picker.Item label="500 steps" value="500" />
           <Picker.Item label="1,000 steps" value="1000" />
+          <Picker.Item label="2,500 steps" value="2500" />
+          <Picker.Item label="5,000 steps" value="5000" />
+          <Picker.Item label="7,500 steps" value="7500" />
+          <Picker.Item label="10,000 steps" value="10000" />
+          <Picker.Item label="12,500 steps" value="12500" />
+          <Picker.Item label="15,000 steps" value="15000" />
+          <Picker.Item label="20,000 steps" value="20000" />
         </Picker>
       </View>
 

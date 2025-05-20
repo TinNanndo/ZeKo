@@ -4,13 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
 import { FLOWER_TYPES, getLeastRepresentedFlower } from '../context/flowerData';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Icons
 import SvgCoins from '../assets/icons/coins.svg';
 import SvgShop from '../assets/icons/shop.svg';
 // Removed SvgSwap import
 
-export default function GardenScreen({ navigation }) {
+export default function GardenScreen({ navigation, route }) {
   const { stepCount, coins } = useStats();
   const [activeFlower, setActiveFlower] = useState(null);
   const [grownFlowers, setGrownFlowers] = useState([]);
@@ -18,59 +19,108 @@ export default function GardenScreen({ navigation }) {
   const [showCollection, setShowCollection] = useState(false);
   const [showFlowerSelector, setShowFlowerSelector] = useState(false);
   const [purchasedFlowers, setPurchasedFlowers] = useState([]);
+  const [flowerProgressMap, setFlowerProgressMap] = useState({});
+
+
+    // Make sure this is in your component
+    useFocusEffect(
+      React.useCallback(() => {
+        console.log('Garden screen focused - refreshing data');
+        loadGardenData();
+        loadPurchasedFlowers();
+        
+        return () => {
+          // Cleanup if needed
+        };
+      }, [])
+    );
+
+  useEffect(() => {
+  const unsubscribe = navigation.addListener('focus', () => {
+    // Check for route params indicating a new flower purchase
+    if (route.params?.newFlower) {
+      console.log('New flower purchased:', route.params.flowerId);
+      
+      // Clear the params to prevent re-processing
+      navigation.setParams({ newFlower: undefined });
+      
+      // Force refresh of purchased flowers
+      loadPurchasedFlowers();
+      
+      // If this flower should be active, refresh the active flower too
+      if (route.params?.makeActive) {
+        loadGardenData();
+      }
+    }
+  });
+
+  return unsubscribe;
+}, [navigation, route]);
 
   // Load garden data
   useEffect(() => {
     loadGardenData();
   }, []);
 
-  // Load purchased flowers
-  useEffect(() => {
-    const loadPurchasedFlowers = async () => {
-      try {
-        const purchases = await AsyncStorage.getItem('shopPurchases');
-        if (purchases) {
-          const purchasedItems = JSON.parse(purchases);
-          
-          // Instead of filtering by unique IDs, group purchases by flower ID
-          // and create an array of flower instances with counts
-          const flowersWithCounts = [];
-          
-          // Group purchases by flower ID to count them
-          const flowerCounts = {};
-          purchasedItems.forEach(item => {
-            if (!flowerCounts[item.id]) {
-              flowerCounts[item.id] = 0;
-            }
+  const loadPurchasedFlowers = async () => {
+    try {
+      const purchases = await AsyncStorage.getItem('shopPurchases');
+      if (purchases) {
+        const purchasedItems = JSON.parse(purchases);
+        
+        // Create a map to count instances of each flower type
+        const flowerCounts = {};
+        purchasedItems.forEach(item => {
+          if (flowerCounts[item.id]) {
             flowerCounts[item.id]++;
-          });
+          } else {
+            flowerCounts[item.id] = 1;
+          }
+        });
+        
+        // Create properly formatted flower objects
+        const flowersWithCounts = [];
+        
+        // Process each purchased item
+        purchasedItems.forEach((purchaseItem, index) => {
+          // Find the flower type details
+          const flowerType = FLOWER_TYPES.find(f => f.id === purchaseItem.id);
           
-          // Create array of flowers with count information
-          Object.keys(flowerCounts).forEach(flowerId => {
-            const flowerType = FLOWER_TYPES.find(f => f.id === flowerId);
-            if (flowerType) {
-              for (let i = 0; i < flowerCounts[flowerId]; i++) {
-                flowersWithCounts.push({
-                  ...flowerType,
-                  instanceId: `${flowerId}_instance${i}`, // Create unique instance ID
-                  count: flowerCounts[flowerId],
-                  instanceNumber: i + 1
-                });
-              }
-            }
-          });
-          
-          setPurchasedFlowers(flowersWithCounts);
-        }
-      } catch (error) {
-        console.error('Error loading purchased flowers:', error);
+          if (flowerType) {
+            // Calculate instance number for this specific purchase
+            const sameTypeItems = purchasedItems.filter(
+              (p, i) => p.id === purchaseItem.id && i <= index
+            );
+            const instanceNumber = sameTypeItems.length;
+            
+            // Create instance ID
+            const instanceId = `${purchaseItem.id}_instance${instanceNumber - 1}`;
+            
+            // Create flower with instance data
+            const flowerWithInstance = {
+              ...flowerType,
+              instanceId: instanceId,
+              instanceNumber: instanceNumber,
+              purchaseId: purchaseItem.purchaseId,
+              count: flowerCounts[purchaseItem.id]
+            };
+            
+            flowersWithCounts.push(flowerWithInstance);
+          }
+        });
+        
+        console.log(`Loaded ${flowersWithCounts.length} purchased flowers`);
+        setPurchasedFlowers(flowersWithCounts);
+      } else {
+        setPurchasedFlowers([]);
       }
-    };
-    
-    loadPurchasedFlowers();
-  }, [showFlowerSelector]); // Reload when selector opens
+    } catch (error) {
+      console.error('Error loading purchased flowers:', error);
+      setPurchasedFlowers([]);
+    }
+  };
 
-  // Growth update effect
+  // Update your growth update effect in GardenScreen.js
   useEffect(() => {
     if (!activeFlower) return;
     
@@ -78,118 +128,140 @@ export default function GardenScreen({ navigation }) {
       try {
         // Calculate the step progress since last update
         const lastStepCount = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
+        
+        // Only proceed if we have more steps than last time
+        if (stepCount <= lastStepCount) {
+          return;
+        }
+        
+        // Calculate new steps since last update
         const stepsSinceLastUpdate = stepCount - lastStepCount;
+        console.log(`New steps detected: ${stepsSinceLastUpdate}`);
         
-        if (stepsSinceLastUpdate <= 0) return; // No new steps
-        
-        // Save current step count as the last tracked count
+        // Update the last tracked step count
         await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
         
-        // Add new steps to growth progress
-        let newProgress = growthProgress + stepsSinceLastUpdate;
+        // Calculate growth multiplier based on flower rarity
+        let growthMultiplier = 1; // Default multiplier
+        
+        // Apply multipliers based on flower properties
+        if (activeFlower.rarity === 'legendary') {
+          growthMultiplier = 2.0; // Legendary flowers grow twice as fast
+        } else if (activeFlower.rarity === 'rare') {
+          growthMultiplier = 1.5; // Rare flowers grow 50% faster
+        } else if (activeFlower.rarity === 'uncommon') {
+          growthMultiplier = 1.2; // Uncommon flowers grow 20% faster
+        }
+        
+        // Apply the multiplier to the steps
+        const effectiveSteps = Math.round(stepsSinceLastUpdate * growthMultiplier);
+        
+        // Get current progress for this flower
+        const currentProgress = flowerProgressMap[activeFlower.instanceId] || 0;
+        
+        // Calculate the new progress
+        const newProgress = currentProgress + effectiveSteps;
+        console.log(`Updating growth progress for ${activeFlower.name}: ${currentProgress} + ${effectiveSteps} = ${newProgress}`);
+        
+        // Update state
+        setGrowthProgress(newProgress);
+        
+        // Update the progress map
+        const updatedMap = {...flowerProgressMap, [activeFlower.instanceId]: newProgress};
+        setFlowerProgressMap(updatedMap);
+        await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(updatedMap));
         
         // Check if flower is fully grown
         if (newProgress >= activeFlower.stepsToGrow) {
+          console.log('Flower fully grown! Processing completion...');
           // Add to grown flowers collection
-          const updatedGrownFlowers = [...grownFlowers, {
+          const newGrownFlower = {
             ...activeFlower,
-            id: `${activeFlower.id}_${Date.now()}`, // Make unique ID
-            grownAt: new Date().toISOString()
-          }];
+            grownAt: Date.now()
+          };
           
-          setGrownFlowers(updatedGrownFlowers);
-          await AsyncStorage.setItem('grownFlowers', JSON.stringify(updatedGrownFlowers));
+          const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
+          const currentGrownFlowers = storedGrownFlowers ? JSON.parse(storedGrownFlowers) : [];
+          currentGrownFlowers.push(newGrownFlower);
           
-          // Reset progress and select next flower
+          await AsyncStorage.setItem('grownFlowers', JSON.stringify(currentGrownFlowers));
+          setGrownFlowers(currentGrownFlowers);
+          
+          // Reset progress for this flower
+          const resetMap = {...updatedMap, [activeFlower.instanceId]: 0};
+          setFlowerProgressMap(resetMap);
           setGrowthProgress(0);
-          await AsyncStorage.setItem('growthProgress', '0');
+          await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(resetMap));
           
-          // Use the getLeastRepresentedFlower helper function
-          const nextFlower = await getLeastRepresentedFlower(updatedGrownFlowers);
-          
-          setActiveFlower(nextFlower);
-          await AsyncStorage.setItem('activeFlower', JSON.stringify(nextFlower));
-          
-          console.log(`Flower fully grown! New flower: ${nextFlower?.name || 'None'}`);
-        } else {
-          // Update progress
-          setGrowthProgress(newProgress);
-          await AsyncStorage.setItem('growthProgress', newProgress.toString());
-          console.log(`Growth progress updated: ${newProgress}/${activeFlower.stepsToGrow}`);
+          // Show completion alert
+          Alert.alert(
+            'Flower Grown!',
+            `Your ${activeFlower.name} has fully grown and been added to your collection!`,
+            [{ text: 'Great!', style: 'default' }]
+          );
         }
       } catch (error) {
         console.error('Error updating growth:', error);
       }
     };
     
+    // Run immediately when component mounts or active flower changes
     updateGrowth();
-  }, [stepCount, activeFlower]);
+    
+    // Set up interval to check for step updates
+    const stepCheckInterval = setInterval(updateGrowth, 5000);
+    
+    return () => {
+      clearInterval(stepCheckInterval);
+    };
+  }, [stepCount, activeFlower, flowerProgressMap]);
   
-  const loadGardenData = async () => {
-    try {
-      const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
-      const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
-      const storedGrowthProgress = await AsyncStorage.getItem('growthProgress');
-      
-      // Also initialize lastTrackedStepCount with current stepCount if not exists
-      const lastTrackedStep = await AsyncStorage.getItem('lastTrackedStepCount');
-      if (!lastTrackedStep) {
-        await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
-      }
-      
-      // Load grown flowers
-      let localGrownFlowers = [];
-      if (storedGrownFlowers) {
-        localGrownFlowers = JSON.parse(storedGrownFlowers);
-        setGrownFlowers(localGrownFlowers);
-      }
-      
-      // Load growth progress
-      if (storedGrowthProgress) {
-        setGrowthProgress(parseInt(storedGrowthProgress, 10));
-      }
-      
-      // Load active flower if it exists
-      if (storedActiveFlower && storedActiveFlower !== 'null') {
-        setActiveFlower(JSON.parse(storedActiveFlower));
-      } else {
-        // Check if user has purchased flowers
-        const purchases = await AsyncStorage.getItem('shopPurchases');
-        if (purchases) {
-          const purchasedItems = JSON.parse(purchases);
-          if (purchasedItems.length > 0) {
-            // Find the first purchased flower
-            const firstPurchaseItem = purchasedItems[0];
-            const firstPurchasedFlowerId = firstPurchaseItem.id;
-            const purchasedFlower = FLOWER_TYPES.find(f => f.id === firstPurchasedFlowerId);
-            
-            if (purchasedFlower) {
-              // Add instance ID to the flower
-              const flowerWithInstance = {
-                ...purchasedFlower,
-                instanceId: `${firstPurchasedFlowerId}_instance0`,
-                instanceNumber: 1
-              };
-              
-              setActiveFlower(flowerWithInstance);
-              await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
-            }
-          } else {
-            // No purchased flowers
-            setActiveFlower(null);
-            await AsyncStorage.setItem('activeFlower', 'null');
-          }
-        } else {
-          // No purchased flowers
-          setActiveFlower(null);
-          await AsyncStorage.setItem('activeFlower', 'null');
-        }
-      }
-    } catch (error) {
-      console.error('Error loading garden data:', error);
-      setActiveFlower(null);
+const loadGardenData = async () => {
+  try {
+    const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
+    const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
+    const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
+    
+    // Load the flower progress map
+    let progressMap = {};
+    if (storedFlowerProgress) {
+      progressMap = JSON.parse(storedFlowerProgress);
+      setFlowerProgressMap(progressMap);
     }
-  };
+    
+    // Also initialize lastTrackedStepCount with current stepCount if not exists
+    const lastTrackedStep = await AsyncStorage.getItem('lastTrackedStepCount');
+    if (!lastTrackedStep) {
+      await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+    }
+    
+    // Load grown flowers
+    let localGrownFlowers = [];
+    if (storedGrownFlowers) {
+      localGrownFlowers = JSON.parse(storedGrownFlowers);
+      setGrownFlowers(localGrownFlowers);
+    }
+    
+    // Load active flower if it exists
+    if (storedActiveFlower && storedActiveFlower !== 'null') {
+      const flower = JSON.parse(storedActiveFlower);
+      setActiveFlower(flower);
+      
+      // Set the growth progress for the active flower
+      if (flower.instanceId && progressMap[flower.instanceId] !== undefined) {
+        setGrowthProgress(progressMap[flower.instanceId]);
+      } else {
+        // Default to 0 if no progress is saved
+        setGrowthProgress(0);
+      }
+    } else {
+      // Your existing code for selecting a default flower
+    }
+  } catch (error) {
+    console.error('Error loading garden data:', error);
+    setActiveFlower(null);
+  }
+};
 
   const navigateToShop = () => {
     navigation.navigate('Shop');
@@ -197,8 +269,25 @@ export default function GardenScreen({ navigation }) {
 
   const selectFlower = async (flower) => {
     try {
+      // Set the active flower
       setActiveFlower(flower);
       await AsyncStorage.setItem('activeFlower', JSON.stringify(flower));
+      
+      // Reset the step tracking point to current steps
+      await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+      
+      // Load the correct progress for this flower instance
+      if (flower.instanceId && flowerProgressMap[flower.instanceId] !== undefined) {
+        setGrowthProgress(flowerProgressMap[flower.instanceId]);
+      } else {
+        // If no progress exists for this flower, start at 0
+        setGrowthProgress(0);
+        // Update the progress map with the new flower
+        const updatedMap = {...flowerProgressMap, [flower.instanceId]: 0};
+        setFlowerProgressMap(updatedMap);
+        await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(updatedMap));
+      }
+      
       setShowFlowerSelector(false);
     } catch (error) {
       console.error('Error selecting flower:', error);
@@ -566,7 +655,7 @@ progressText: {
   },
   shopButtonLarge: {
     flexDirection: 'row',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#2E4834',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 30,

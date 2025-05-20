@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STEP_LENGTH } from '../utils/PedometerService';
 
 const StatsContext = createContext();
 
@@ -12,6 +13,8 @@ export const StatsProvider = ({ children }) => {
   const [lastSavedDate, setLastSavedDate] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [stepGoal, setStepGoal] = useState(10000); // Add this line
+
 
   // Load initial stats
   useEffect(() => {
@@ -23,6 +26,11 @@ export const StatsProvider = ({ children }) => {
         const storedCoins = await AsyncStorage.getItem('coins');
         const storedWeeklyStats = await AsyncStorage.getItem('weeklyStats');
         const storedLastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+        const storedStepGoal = await AsyncStorage.getItem('stepGoal');
+
+        if (storedStepGoal) {
+          setStepGoal(parseInt(storedStepGoal, 10));
+        }
 
         setStepCount(parseInt(storedStepCount, 10) || 0);
         setCaloriesBurned(parseFloat(storedCaloriesBurned) || 0);
@@ -53,11 +61,27 @@ export const StatsProvider = ({ children }) => {
     loadStats();
   }, []);
 
-  // Function to update coins and persist the change
-  const updateCoins = (newAmount) => {
-    setCoins(newAmount);
-    AsyncStorage.setItem('coins', newAmount.toString());
+    const updateStepGoal = (newGoal) => {
+    setStepGoal(newGoal);
+    AsyncStorage.setItem('stepGoal', newGoal.toString());
   };
+
+  // Function to update coins and persist the change
+const updateCoins = (newAmount) => {
+  setCoins(newAmount);
+  AsyncStorage.setItem('coins', newAmount.toString());
+};
+
+const addCoinsFromSteps = (newSteps, prevSteps) => {
+  // Only add coins for new steps, not recalculate from zero
+  const additionalSteps = Math.max(0, newSteps - prevSteps);
+  const additionalCoins = Math.floor(additionalSteps / 100);
+  
+  if (additionalCoins > 0) {
+    updateCoins(coins + additionalCoins);
+    console.log(`Added ${additionalCoins} coins from ${additionalSteps} new steps`);
+  }
+};
 
   // Save current stats to AsyncStorage
   useEffect(() => {
@@ -149,26 +173,48 @@ export const StatsProvider = ({ children }) => {
     return () => clearInterval(intervalId);
   }, [lastSavedDate, isInitialized]);
 
-  return (
-    <StatsContext.Provider
-      value={{
-        stepCount,
-        setStepCount,
-        caloriesBurned,
-        setCaloriesBurned,
-        distance,
-        setDistance,
-        coins,
-        setCoins: updateCoins, // Use the updateCoins function for setCoins
-        weeklyHistory,
-        resetDailyStats,
-        saveCurrentStatsToHistory,
-        isReady
-      }}
-    >
-      {children}
-    </StatsContext.Provider>
-  );
+  // Centralized distance calculation
+const calculateDistance = (steps) => {
+  return (steps * STEP_LENGTH) / 1000; // Convert to kilometers
+};
+
+// Update step count and recalculate distance correctly
+const updateStepCount = (newStepCount) => {
+  setStepCount(newStepCount);
+  
+  // Always recalculate distance when steps change
+  const newDistance = calculateDistance(newStepCount);
+  setDistance(newDistance);
+  
+  // Save both to storage
+  AsyncStorage.setItem('stepCount', newStepCount.toString());
+  AsyncStorage.setItem('distance', newDistance.toString());
+};
+
+return (
+  <StatsContext.Provider
+    value={{
+      stepCount,
+      setStepCount: updateStepCount, // Replace direct setter with our function
+      caloriesBurned,
+      setCaloriesBurned,
+      distance,
+      setDistance,
+      coins,
+      setCoins: updateCoins,
+      addCoinsFromSteps,
+      weeklyHistory,
+      resetDailyStats,
+      saveCurrentStatsToHistory,
+      isReady,
+      calculateDistance, // Export the calculation function
+      stepGoal, // Add this
+      setStepGoal: updateStepGoal, 
+    }}
+  >
+    {children}
+  </StatsContext.Provider>
+);
 };
 
 export const useStats = () => useContext(StatsContext);

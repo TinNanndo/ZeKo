@@ -9,7 +9,6 @@ import RectProgress from '../utils/RectProgress';
 
 export default function StatsScreen() {
   const [weeklyStats, setWeeklyStats] = useState([]);
-  const [stepGoal, setStepGoal] = useState(10000);
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedStats, setSelectedStats] = useState(null);
   const { 
@@ -17,7 +16,8 @@ export default function StatsScreen() {
     caloriesBurned, 
     distance, 
     coins, 
-    weeklyHistory  // Add this to access history from context
+    weeklyHistory,
+    stepGoal  // From context
   } = useStats();
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,67 +25,64 @@ export default function StatsScreen() {
   const [flowersGrown, setFlowersGrown] = useState(0); 
   const [totalFlowerTypes, setTotalFlowerTypes] = useState(0);
 
-    // Add this new useEffect to load flower stats
-  useEffect(() => {
-    const loadFlowerStats = async () => {
-      try {
-        // Load collected flowers data
-        const shopPurchasesString = await AsyncStorage.getItem('shopPurchases');
-        const grownFlowersString = await AsyncStorage.getItem('grownFlowers');
-        
-        // Get total flower types from the flower data
-        const totalTypes = FLOWER_TYPES.length;
-        setTotalFlowerTypes(totalTypes);
-        
-        // Calculate flowers collected (purchased)
-        if (shopPurchasesString) {
-          const purchases = JSON.parse(shopPurchasesString);
-          setFlowersCollected(purchases.length);
-        }
-        
-        // Calculate flowers grown
-        if (grownFlowersString) {
-          const grown = JSON.parse(grownFlowersString);
-          setFlowersGrown(grown.length);
-        }
-        
-        console.log('Loaded flower stats - Collected:', flowersCollected, 'Grown:', flowersGrown);
-      } catch (error) {
-        console.error('Error loading flower stats:', error);
+  // Load flower stats whenever component mounts or receives focus
+  const loadFlowerStats = async () => {
+    try {
+      // Load collected flowers data
+      const shopPurchasesString = await AsyncStorage.getItem('shopPurchases');
+      const grownFlowersString = await AsyncStorage.getItem('grownFlowers');
+      
+      // Get total flower types from the flower data
+      const totalTypes = FLOWER_TYPES.length;
+      setTotalFlowerTypes(totalTypes);
+      
+      // Calculate flowers collected (purchased)
+      if (shopPurchasesString) {
+        const purchases = JSON.parse(shopPurchasesString);
+        setFlowersCollected(purchases.length);
+      } else {
+        setFlowersCollected(0);
       }
-    };
-    
-    loadFlowerStats();
-  }, []); // Run once on component mount
+      
+      // Calculate flowers grown
+      if (grownFlowersString) {
+        const grown = JSON.parse(grownFlowersString);
+        setFlowersGrown(grown.length);
+      } else {
+        setFlowersGrown(0);
+      }
+      
+      console.log('Loaded flower stats - Collected:', 
+        shopPurchasesString ? JSON.parse(shopPurchasesString).length : 0, 
+        'Grown:', 
+        grownFlowersString ? JSON.parse(grownFlowersString).length : 0);
+    } catch (error) {
+      console.error('Error loading flower stats:', error);
+    }
+  };
   
-  // Add a useFocusEffect to reload flower stats when the screen comes into focus
+  // Initial load when component mounts
+  useEffect(() => {
+    loadFlowerStats();
+  }, []);
+
+  // Reload when screen gains focus
   useFocusEffect(
     React.useCallback(() => {
-      const reloadFlowerStats = async () => {
-        try {
-          const shopPurchasesString = await AsyncStorage.getItem('shopPurchases');
-          const grownFlowersString = await AsyncStorage.getItem('grownFlowers');
-          
-          if (shopPurchasesString) {
-            const purchases = JSON.parse(shopPurchasesString);
-            setFlowersCollected(purchases.length);
-          }
-          
-          if (grownFlowersString) {
-            const grown = JSON.parse(grownFlowersString);
-            setFlowersGrown(grown.length);
-          }
-          
-          console.log('Reloaded flower stats on focus');
-        } catch (error) {
-          console.error('Error reloading flower stats:', error);
-        }
-      };
-      
-      reloadFlowerStats();
+      console.log('Stats screen focused, reloading flower stats');
+      loadFlowerStats();
       return () => {}; // cleanup function
     }, [])
   );
+  
+  // Set up event listener for storage changes
+  useEffect(() => {
+    const checkForUpdates = setInterval(() => {
+      loadFlowerStats();
+    }, 3000); // Check every 3 seconds
+    
+    return () => clearInterval(checkForUpdates);
+  }, []);
 
   useEffect(() => {
     const fetchWeeklyStats = async () => {
@@ -114,17 +111,7 @@ export default function StatsScreen() {
       }
     };
   
-    const fetchStepGoal = async () => {
-      try {
-        const storedStepGoal = await AsyncStorage.getItem('stepGoal');
-        setStepGoal(parseInt(storedStepGoal, 10) || 10000);
-      } catch (error) {
-        console.error('Error fetching step goal:', error);
-      }
-    };
-  
     fetchWeeklyStats();
-    fetchStepGoal();
   }, [weeklyHistory]); // Re-run when weeklyHistory changes
 
   // Rest of your code remains unchanged
@@ -407,28 +394,28 @@ const logAvailableDates = () => {
 
               <View style={styles.statItem}>
                 <Text style={styles.statTitle}>Distance</Text>
-                <Text style={styles.statValue}>
-                  <Text style={styles.boldText}>{displayStats.distance.toFixed(1)}</Text> km
-                </Text>
+                  <Text style={styles.statValue}>
+                    <Text style={styles.boldText}>{displayStats.distance.toFixed(2)}</Text> km
+                  </Text>
               </View>
             </View>
           </View>
         </View>
 
       {/* Flower Stats */}
-      <View style={styles.flowerCard}>
-        <Text style={styles.flowerTitle}>Flower Stats</Text>
-        <View style={styles.flowerContent}>
-          <Text style={styles.flowerText}>
-            Flowers collected: <Text style={styles.boldText}>
-              {flowersCollected} / {totalFlowerTypes}
+        <View style={styles.flowerCard}>
+          <Text style={styles.flowerTitle}>Flower Stats</Text>
+          <View style={styles.flowerContent}>
+            <Text style={styles.flowerText}>
+              Flowers collected: <Text style={styles.boldText}>
+                {flowersCollected} / {totalFlowerTypes}
+              </Text>
             </Text>
-          </Text>
-          <Text style={styles.flowerText}>
-            Flowers grown: <Text style={styles.boldText}>{flowersGrown}</Text>
-          </Text>
+            <Text style={styles.flowerText}>
+              Flowers grown: <Text style={styles.boldText}>{flowersGrown}</Text>
+            </Text>
+          </View>
         </View>
-      </View>
       </View>
     </SafeAreaView>
   );

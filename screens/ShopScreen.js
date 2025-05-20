@@ -65,9 +65,6 @@ const handlePurchase = async (item) => {
     return;
   }
 
-  // Remove the check for already purchased
-  // Instead, we'll adjust the purchase function to always allow purchases
-
   // Update coins
   setCoins(coins - item.price);
 
@@ -77,7 +74,7 @@ const handlePurchase = async (item) => {
   // Add to purchased items with unique ID
   const newPurchases = [...purchasedItems, { 
     id: item.id,
-    purchaseId: purchaseId, // Add unique purchase ID
+    purchaseId: purchaseId,
     purchasedAt: new Date().toISOString() 
   }];
   setPurchasedItems(newPurchases);
@@ -90,14 +87,37 @@ const handlePurchase = async (item) => {
   if (isFirstPurchase) {
     const purchasedFlower = FLOWER_TYPES.find(f => f.id === item.id);
     if (purchasedFlower) {
-      await AsyncStorage.setItem('activeFlower', JSON.stringify(purchasedFlower));
-      await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
+      // Create instance ID
+      const flowerWithInstance = {
+        ...purchasedFlower,
+        instanceId: `${item.id}_instance0`,
+        instanceNumber: 1
+      };
       
+      // Initialize the progress map for this flower
+const flowerProgressMap = await AsyncStorage.getItem('flowerProgressMap');
+const progressMap = flowerProgressMap ? JSON.parse(flowerProgressMap) : {};
+
+// Ensure the progress is set to 0 for this flower instance
+progressMap[flowerWithInstance.instanceId] = 0;
+      
+await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(progressMap));
+await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
+      await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
+await AsyncStorage.setItem('lastTrackedStepCount', '0'); // Reset step tracking      
+
       Alert.alert(
         'First Flower Purchased!', 
         `You have purchased ${item.name}. It is now set as your active flower. Return to the garden to see it grow!`,
         [
-          { text: 'OK', onPress: () => navigation.navigate('Garden') }
+          { 
+            text: 'OK', 
+            onPress: () => navigation.navigate('Garden', { 
+              newFlower: true,
+              flowerId: item.id,
+              purchaseId: purchaseId
+            })
+          }
         ]
       );
     } else {
@@ -114,13 +134,37 @@ const handlePurchase = async (item) => {
           onPress: async () => {
             const purchasedFlower = FLOWER_TYPES.find(f => f.id === item.id);
             if (purchasedFlower) {
-              await AsyncStorage.setItem('activeFlower', JSON.stringify(purchasedFlower));
+              // Create instance ID for the new flower
+              const instanceIdx = purchasedItems.filter(p => p.id === item.id).length - 1;
+              const flowerWithInstance = {
+                ...purchasedFlower,
+                instanceId: `${item.id}_instance${instanceIdx}`,
+                instanceNumber: instanceIdx + 1
+              };
+              
+              await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
               await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
-              navigation.navigate('Garden');
+              await AsyncStorage.setItem('lastTrackedStepCount', '0'); // Reset step count
+              
+              navigation.navigate('Garden', { 
+                newFlower: true,
+                flowerId: item.id,
+                purchaseId: purchaseId,
+                makeActive: true
+              });
             }
           } 
         },
-        { text: 'No', style: 'cancel' }
+        { 
+          text: 'No', 
+          style: 'cancel',
+          onPress: () => navigation.navigate('Garden', { 
+            newFlower: true,
+            flowerId: item.id,
+            purchaseId: purchaseId,
+            makeActive: false
+          })
+        }
       ]
     );
   }

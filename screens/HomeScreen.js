@@ -29,6 +29,7 @@ function HomeScreen() {
   const { 
     stepCount, 
     setStepCount, 
+    updateStepCount,
     caloriesBurned, 
     setCaloriesBurned, 
     distance, 
@@ -36,8 +37,11 @@ function HomeScreen() {
     coins, 
     setCoins, 
     stepGoal, 
-    isReady 
-  } = useStats();  const [activeFlower, setActiveFlower] = useState(null);
+    isReady,
+    checkForNewDay,
+    addCoinsFromSteps
+  } = useStats();  
+  const [activeFlower, setActiveFlower] = useState(null);
   const [growthProgress, setGrowthProgress] = useState(0);
   const [grownFlowers, setGrownFlowers] = useState([]);
   const [dimensions, setDimensions] = useState({screen: Dimensions.get('window')});
@@ -159,52 +163,40 @@ function HomeScreen() {
     }, [])
   );
   
-  // Update your flower progress useEffect to be more reactive
-  useEffect(() => {
-    if (!activeFlower) return;
-    
-    const syncFlowerProgress = async () => {
-      try {
-        // Always check the latest growth progress from storage to 
-        // stay in sync with GardenScreen
-      const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
-      if (storedFlowerProgress) {
-        const progressMap = JSON.parse(storedFlowerProgress);
-        
-        // Get the progress specific to this flower
-        if (activeFlower.instanceId && progressMap[activeFlower.instanceId] !== undefined) {
-          const newProgress = progressMap[activeFlower.instanceId];
-          if (newProgress !== growthProgress) {
-            console.log(`Updating flower progress for ${activeFlower.name}: ${newProgress} steps`);
-            setGrowthProgress(newProgress);
-          }
+useEffect(() => {
+  if (!activeFlower) return;
+
+  const updateFlowerGrowth = async () => {
+    try {
+      const lastTracked = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
+
+      if (stepCount > lastTracked) {
+        const stepsSince = stepCount - lastTracked;
+        const newProgress = growthProgress + stepsSince;
+
+        setGrowthProgress(newProgress);
+
+        const storedMap = await AsyncStorage.getItem('flowerProgressMap');
+        const map = storedMap ? JSON.parse(storedMap) : {};
+
+        if (activeFlower.instanceId) {
+          map[activeFlower.instanceId] = newProgress;
+          await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(map));
+        }
+
+        await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+
+        if (newProgress >= activeFlower.stepsToGrow) {
+          console.log('Flower fully grown!');
         }
       }
-        
-        // Rest of your existing flower progress update code
-      const lastTrackedStep = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
-      if (stepCount <= lastTrackedStep) return;
-        
-        const stepsSinceLastUpdate = stepCount - lastTrackedStep;
-        if (stepsSinceLastUpdate > 0) {
-          const newProgress = growthProgress + stepsSinceLastUpdate;
-          setGrowthProgress(newProgress);
-          
-          await AsyncStorage.setItem('growthProgress', newProgress.toString());
-          await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
-          
-          if (newProgress >= activeFlower.stepsToGrow) {
-            console.log('Flower has reached full growth! Visit Garden to see it bloom.');
-          }
-        }
-        await loadGardenData();
-      } catch (error) {
-        console.error('Error syncing flower progress:', error);
-      }
-    };
-    
-    syncFlowerProgress();
-  }, [stepCount, activeFlower, growthProgress]);
+    } catch (error) {
+      console.error('Error updating flower growth:', error);
+    }
+  };
+
+  updateFlowerGrowth();
+}, [stepCount]);
 
   // Initialize pedometer only once StatsContext is ready
   useEffect(() => {
@@ -232,21 +224,14 @@ function HomeScreen() {
   }, [isReady, stepCount]);
 
 const handleStepDetected = () => {
-  setStepCount(prevStepCount => {
-    const newStepCount = prevStepCount + 1;
-    // Distance calculation now handled in StatsContext
-    return newStepCount;
-  });
+  const prev = stepCount;
+  const updated = stepCount + 1;
+
+  updateStepCount(updated);     
+  addCoinsFromSteps(updated, prev); 
 };
 
-  // Update your existing app state useEffect
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    
-    return () => {
-      subscription.remove();
-    };
-  }, [appState, stepCount]); // Add stepCount as a dependency
+
 
     // Add this after your other useEffect hooks
   useEffect(() => {
@@ -269,38 +254,43 @@ const handleStepDetected = () => {
     
     return () => clearInterval(refreshInterval);
   }, []);
-
-  // Handle app going to background/foreground
-  const handleAppStateChange = async (nextAppState) => {
-    // When app goes to background
-    if (nextAppState.match(/inactive|background/)) {
-      const currentTime = new Date().getTime();
-      await AsyncStorage.setItem('appBackgroundTime', currentTime.toString());
-      await AsyncStorage.setItem('backgroundStepCount', stepCount.toString());
-      console.log('App entering background, saved background time and step count');
-    }
-    
-    // When app comes to foreground
-    if (appState.match(/inactive|background/) && nextAppState === 'active') {
-      console.log('App coming to foreground');
+  
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState) => {
+      const prevState = appState;
+      setAppState(nextAppState);
       
-      // Handle background time estimation logic
-      const appBackgroundTime = await AsyncStorage.getItem('appBackgroundTime');
-      const backgroundStepCount = await AsyncStorage.getItem('backgroundStepCount');
-      
-      if (appBackgroundTime && backgroundStepCount) {
-        const currentTime = new Date().getTime();
-        const backgroundTime = currentTime - parseInt(appBackgroundTime);
-        const minutesInBackground = backgroundTime / (1000 * 60);
+      if (prevState === 'background' && nextAppState === 'active') {
+        console.log('App came to foreground, checking for day change');
+        // Check for day change and reset step tracking if needed
+        const dayChanged = await checkForNewDay();
         
-        if (minutesInBackground > 1) {
-          console.log(`App was in background for ${minutesInBackground.toFixed(1)} minutes`);
+        if (dayChanged) {
+          console.log('Day changed, resetting pedometer tracking');
+          // Unsubscribe and resubscribe to reset the pedometer
+          PedometerService.unsubscribe();
+          PedometerService.resetTracking(0);
+          PedometerService.subscribe(handleStepDetected, 0);
         }
+        
+        // Also check for flowers that need updates
+        loadGardenData();
       }
-    }
+    };
     
-    setAppState(nextAppState);
-  };
+    // Set up app state listener
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription.remove();
+    };
+  }, [appState]);
+
+useEffect(() => {
+  const newCalories = PedometerService.calculateCaloriesBurned(stepCount, weight);
+  setCaloriesBurned(newCalories);
+}, [stepCount, weight]);
+
 
 useEffect(() => {
   // Update calories based on all steps
@@ -311,37 +301,41 @@ useEffect(() => {
   prevStepCount.current = stepCount;
 }, [stepCount, weight]);
 
-// Add this new effect to handle step changes for coin calculation
+useEffect(() => {
+  const newDistance = (stepCount * STEP_LENGTH) / 1000;
+  if (Math.abs(newDistance - distance) > 0.01) {
+    setDistance(newDistance);
+  }
+}, [stepCount]);
+
+
 useEffect(() => {
   const handleStepCountChange = async () => {
     try {
-      // Get the last step count we used for coins
       const lastCoinStepCount = parseInt(await AsyncStorage.getItem('lastCoinStepCount') || '0', 10);
-      
-      // If we have more steps now, add coins just for the difference
+
       if (stepCount > lastCoinStepCount) {
         const additionalSteps = stepCount - lastCoinStepCount;
         const newCoins = Math.floor(additionalSteps / 100);
-        
+
         if (newCoins > 0) {
           setCoins(prevCoins => {
-            const updatedCoins = prevCoins + newCoins;
-            AsyncStorage.setItem('coins', updatedCoins.toString());
-            return updatedCoins;
+            const updated = prevCoins + newCoins;
+            AsyncStorage.setItem('coins', updated.toString());
+            return updated;
           });
-          
-          // Update the last step count we used for coins
+
           await AsyncStorage.setItem('lastCoinStepCount', stepCount.toString());
-          console.log(`Added ${newCoins} coins from ${additionalSteps} new steps`);
         }
       }
     } catch (error) {
       console.error('Error updating coins from steps:', error);
     }
   };
-  
+
   handleStepCountChange();
 }, [stepCount]);
+
 
   const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(0), 100);
 
@@ -365,10 +359,6 @@ useEffect(() => {
               <Text style={styles.coinsText}>{coins}</Text>
               <SvgCoins width="19.5" height="24" />
             </View>
-          </View>
-
-          <View style={styles.notificationContainer}>
-            <SvgNotif width="19.5" height="24" />
           </View>
         </View>
 
@@ -416,7 +406,7 @@ useEffect(() => {
             <View style={styles.cardContent}>
               <Text style={styles.cardTitle}>Distance</Text>
                 <Text style={styles.cardValue}>
-                  <Text style={styles.cardValueBold}>{distance.toFixed(2)}</Text> km
+                  <Text style={styles.cardValueBold}>{(distance || 0).toFixed(2)}</Text> km
                 </Text>
             </View>
           </View>
@@ -446,7 +436,7 @@ useEffect(() => {
                   </View>
                 </>
               ) : (
-                <View style={styles.noFlowerMessage}>
+                <View>
                   <Text style={styles.noFlowerText}>
                     No active flower yet. Visit the shop to buy your first flower!
                   </Text>
@@ -541,11 +531,11 @@ stepsCard: {
   borderRadius: 15,
   padding: 20,
   marginTop: 15,
-  shadowColor: '#000',
+      shadowColor: '#000',
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.8,
   shadowRadius: 2,
-  elevation: 5,
+  elevation: 2,
   justifyContent: 'space-between',
 },
 stepsLeftColumn: {
@@ -615,6 +605,11 @@ stepsGoal: {
     borderRadius: 15,
     padding: 20,
     flex: 1,
+      shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
   },
   card01: {
     marginRight: 10,
@@ -653,7 +648,7 @@ flowerCard: {
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.8,
   shadowRadius: 2,
-  elevation: 5,
+  elevation: 2,
   flexDirection: 'row',
   justifyContent: 'space-between',
 },
@@ -694,16 +689,9 @@ flowerImage: {
   fontSize: 14,
   marginTop: 10,
   },
-            noFlowerMessage: {
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: 20,
-          },
           noFlowerText: {
             color: 'white',
             fontSize: 14,
-            textAlign: 'center',
-            marginBottom: 10,
           },
           shopButtonContainer: {
             flex: 1,

@@ -40,29 +40,29 @@ class PedometerService {
     }
   }
 
-  subscribe(onStepDetected, currentStepCount) {
-    // Store the starting step count to track progress
-    this.startingSteps = currentStepCount || 0;
-    console.log('PedometerService starting with step count:', this.startingSteps);
-    
-    if (!this.accelerometerSubscription) {
-      this.accelerometerSubscription = Accelerometer.addListener(acceleration => {
-        this.detectStep(acceleration, this.gyroData, onStepDetected);
-      });
-      // Better balance between accuracy and battery
-      Accelerometer.setUpdateInterval(100); // More sensitive for better step detection
-    }
-    
-    if (!this.gyroscopeSubscription) {
-      this.gyroscopeSubscription = Gyroscope.addListener(gyro => {
-        this.gyroData = gyro;
-      });
-      Gyroscope.setUpdateInterval(100);
-    }
+async subscribe(onStepDetected, currentStepCount) {
+  // Reset tracking variables
+  this.startingSteps = currentStepCount || 0;
+  console.log('PedometerService starting with step count:', this.startingSteps);
+  this.rateTrackingStart = Date.now();
   
-    // Start tracking step rate
-    this.startStepRateTracking();
+  if (!this.accelerometerSubscription) {
+    this.accelerometerSubscription = Accelerometer.addListener(acceleration => {
+      this.detectStep(acceleration, this.gyroData, onStepDetected);
+    });
+    Accelerometer.setUpdateInterval(100); // More sensitive for better step detection
   }
+  
+  if (!this.gyroscopeSubscription) {
+    this.gyroscopeSubscription = Gyroscope.addListener(gyro => {
+      this.gyroData = gyro;
+    });
+    Gyroscope.setUpdateInterval(100);
+  }
+
+  // Start tracking step rate
+  this.startStepRateTracking();
+}
 
   unsubscribe() {
     if (this.accelerometerSubscription) {
@@ -77,6 +77,36 @@ class PedometerService {
 
     if (this.stepRateInterval) {
       clearInterval(this.stepRateInterval);
+    }
+  }
+
+    async resetTracking(currentStepCount = 0) {
+    // Reset all tracking variables
+    this.startingSteps = currentStepCount;
+    this.rateTrackingStart = Date.now();
+    this.lastPeakTime = 0;
+    this.walkingState = false;
+    this.recentMagnitudes = [];
+    
+    console.log('PedometerService tracking reset with step count:', currentStepCount);
+    
+    // Reset stored step count tracker for flower growth tracking
+    await AsyncStorage.setItem('lastTrackedStepCount', '0');
+  }
+
+    async checkForDayChange() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+      
+      if (lastSavedDate && lastSavedDate !== today) {
+        console.log('Day change detected in PedometerService');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking for day change in PedometerService:', error);
+      return false;
     }
   }
 
@@ -172,7 +202,16 @@ class PedometerService {
   }
 
   calculateDistance(steps) {
-    return (steps * STEP_LENGTH) / 1000; // Convert to kilometers
+    // Add validation to prevent NaN
+    if (!steps || isNaN(steps) || steps < 0) {
+      return 0;
+    }
+    
+    // Parse steps to ensure it's a number
+    const numSteps = Number(steps);
+    
+    // Calculate and return with 2 decimal places for consistency
+    return parseFloat(((numSteps * STEP_LENGTH) / 1000).toFixed(2));
   }
 }
 

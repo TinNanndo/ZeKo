@@ -1,8 +1,24 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { AppState } from 'react-native'; // Make sure to import AppState from react-native
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STEP_LENGTH } from '../utils/PedometerService';
 
 const StatsContext = createContext();
+
+  // Centralized distance calculation with error handling
+  const calculateDistance = (steps) => {
+    // Validate input
+    if (!steps || isNaN(steps) || steps < 0) {
+      return 0;
+    }
+    
+    // Convert to number just to be sure
+    const numSteps = Number(steps);
+    
+    // Calculate with 2 decimal precision
+    const distanceKm = (numSteps * STEP_LENGTH) / 1000;
+    return parseFloat(distanceKm.toFixed(2));
+  };
 
 export const StatsProvider = ({ children }) => {
   const [stepCount, setStepCount] = useState(0);
@@ -72,41 +88,44 @@ const updateCoins = (newAmount) => {
   AsyncStorage.setItem('coins', newAmount.toString());
 };
 
-const addCoinsFromSteps = (newSteps, prevSteps) => {
-  // Only add coins for new steps, not recalculate from zero
+const addCoinsFromSteps = async (newSteps, prevSteps) => {
   const additionalSteps = Math.max(0, newSteps - prevSteps);
   const additionalCoins = Math.floor(additionalSteps / 100);
-  
+
   if (additionalCoins > 0) {
-    updateCoins(coins + additionalCoins);
+    const updatedCoins = coins + additionalCoins;
+    setCoins(updatedCoins);
+    await AsyncStorage.setItem('coins', updatedCoins.toString());
+    await AsyncStorage.setItem('lastCoinStepCount', newSteps.toString());
     console.log(`Added ${additionalCoins} coins from ${additionalSteps} new steps`);
   }
 };
 
-  // Save current stats to AsyncStorage
-  useEffect(() => {
-    if (isInitialized) {
-      AsyncStorage.setItem('stepCount', stepCount.toString());
-      AsyncStorage.setItem('caloriesBurned', caloriesBurned.toString());
-      AsyncStorage.setItem('distance', distance.toString());
-      AsyncStorage.setItem('coins', coins.toString());
-    }
-  }, [stepCount, caloriesBurned, distance, coins, isInitialized]);
 
-  // Save weekly history to AsyncStorage
-  useEffect(() => {
-    if (isInitialized && weeklyHistory.length > 0) {
-      AsyncStorage.setItem('weeklyStats', JSON.stringify(weeklyHistory));
-      console.log('Weekly stats saved to storage:', weeklyHistory);
-    }
-  }, [weeklyHistory, isInitialized]);
+// Save current stats to AsyncStorage
+useEffect(() => {
+  if (isInitialized) {
+    AsyncStorage.setItem('stepCount', stepCount.toString());
+    AsyncStorage.setItem('caloriesBurned', caloriesBurned.toString());
+    AsyncStorage.setItem('distance', distance.toString());
+    AsyncStorage.setItem('coins', coins.toString());
+  }
+}, [stepCount, caloriesBurned, distance, coins, isInitialized]);
 
-  // Save last saved date to AsyncStorage
-  useEffect(() => {
-    if (isInitialized && lastSavedDate) {
-      AsyncStorage.setItem('lastSavedDate', lastSavedDate);
-    }
-  }, [lastSavedDate, isInitialized]);
+// Save weekly history to AsyncStorage
+useEffect(() => {
+  if (isInitialized && weeklyHistory.length > 0) {
+    AsyncStorage.setItem('weeklyStats', JSON.stringify(weeklyHistory));
+    console.log('Weekly stats saved to storage:', weeklyHistory);
+  }
+}, [weeklyHistory, isInitialized]);
+
+// Save last saved date to AsyncStorage
+useEffect(() => {
+  if (isInitialized && lastSavedDate) {
+    AsyncStorage.setItem('lastSavedDate', lastSavedDate);
+  }
+}, [lastSavedDate, isInitialized]);
 
   const saveCurrentStatsToHistory = async () => {
     const currentDate = new Date().toISOString().split('T')[0];
@@ -135,55 +154,133 @@ const addCoinsFromSteps = (newSteps, prevSteps) => {
     }
   };
 
-  const resetDailyStats = async () => {
-    // Make sure to await the save operation before resetting
+const resetDailyStats = async () => {
+  try {
     await saveCurrentStatsToHistory();
-    
-    // Now reset the daily counters
+
     setStepCount(0);
     setCaloriesBurned(0);
     setDistance(0);
-    // Note: Not resetting coins as they accumulate
-    
-    // Update the last saved date to today
+
+    await AsyncStorage.setItem('stepCount', '0');
+    await AsyncStorage.setItem('caloriesBurned', '0');
+    await AsyncStorage.setItem('distance', '0');
+
     const today = new Date().toISOString().split('T')[0];
+    await AsyncStorage.setItem('lastSavedDate', today);
     setLastSavedDate(today);
-    
-    console.log('Daily stats reset for new day');
-  };
 
-  // Check if we need to reset stats for a new day
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    const checkForNewDay = async () => {
-      const today = new Date().toISOString().split('T')[0];
-      
-      if (lastSavedDate && lastSavedDate !== today) {
-        console.log(`New day detected! Last saved: ${lastSavedDate}, Today: ${today}`);
-        await resetDailyStats();
-      }
-    };
-    
-    checkForNewDay();
-    
-    // Check every hour
-    const intervalId = setInterval(checkForNewDay, 60 * 60 * 1000);
-    
-    return () => clearInterval(intervalId);
-  }, [lastSavedDate, isInitialized]);
-
-  // Centralized distance calculation
-const calculateDistance = (steps) => {
-  return (steps * STEP_LENGTH) / 1000; // Convert to kilometers
+    console.log('Daily stats successfully reset for new day');
+  } catch (error) {
+    console.error('Error resetting daily stats:', error);
+  }
 };
 
+   
+const checkForNewDay = async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get the last saved date directly from storage to ensure freshness
+    const storedLastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+    
+    console.log(`Checking for day change: Last saved: ${storedLastSavedDate || 'none'}, Today: ${today}`);
+    
+    if (!storedLastSavedDate || storedLastSavedDate !== today) {
+      console.log(`New day detected! Last saved: ${storedLastSavedDate}, Today: ${today}`);
+      
+      // Save current stats before resetting
+      await saveCurrentStatsToHistory();
+      
+      // Reset the step count and related metrics to 0
+      setStepCount(0);
+      setCaloriesBurned(0);
+      setDistance(0);
+      
+      // Update storage directly to ensure it's reset
+      await AsyncStorage.setItem('stepCount', '0');
+      await AsyncStorage.setItem('caloriesBurned', '0');
+      await AsyncStorage.setItem('distance', '0');
+      
+      // Reset the pedometer tracking for flower growth
+      await AsyncStorage.setItem('lastTrackedStepCount', '0');
+      
+      // Update the last saved date to today
+      await AsyncStorage.setItem('lastSavedDate', today);
+      setLastSavedDate(today);
+      
+      console.log('Daily stats reset for new day');
+      
+      // Force reset of pedometer service
+      return true; // Return true to indicate a day change happened
+    }
+    return false; // No day change
+  } catch (error) {
+    console.error('Error checking for new day:', error);
+    return false;
+  }
+};
+
+// Replace this useEffect block
+useEffect(() => {
+  // Check for app state changes for day change detection
+  const handleAppStateChange = async (nextAppState) => {
+    if (nextAppState === 'active' && isInitialized) {
+      console.log('App came to foreground, checking for day change');
+      await checkForNewDay();
+    }
+  };
+
+  // Use a try-catch to handle potential missing AppState.addEventListener
+  try {
+    // Compatible with both older and newer React Native versions
+    if (typeof AppState.addEventListener === 'function') {
+      // Modern API (React Native 0.65+)
+      const subscription = AppState.addEventListener('change', handleAppStateChange);
+      return () => {
+        subscription.remove();
+      };
+    } else {
+      // Legacy API
+      AppState.addEventListener('change', handleAppStateChange);
+      return () => {
+        AppState.removeEventListener('change', handleAppStateChange);
+      };
+    }
+  } catch (error) {
+    console.error('Error setting up AppState listener:', error);
+    
+    // Fallback to just interval checks if AppState API fails
+    return () => {};
+  }
+}, [isInitialized]);
+
+// Add this new useEffect after your AppState listener
+useEffect(() => {
+  if (!isInitialized) return;
+  
+  // Check for day change every 15 minutes
+  const intervalCheck = setInterval(async () => {
+    console.log('Performing periodic day change check');
+    await checkForNewDay();
+  }, 15 * 60 * 1000); // 15 minutes
+  
+  // Run once immediately after initialization
+  checkForNewDay();
+  
+  return () => clearInterval(intervalCheck);
+}, [isInitialized]);
+
+// Update step count and recalculate distance correctly
 // Update step count and recalculate distance correctly
 const updateStepCount = (newStepCount) => {
-  setStepCount(newStepCount);
-  
   // Always recalculate distance when steps change
   const newDistance = calculateDistance(newStepCount);
+  
+  console.log(`Updating steps to ${newStepCount}, new distance: ${newDistance.toFixed(2)}km`);
+  
+  // Set both state values
+  setStepCount(newStepCount);
   setDistance(newDistance);
   
   // Save both to storage
@@ -191,11 +288,18 @@ const updateStepCount = (newStepCount) => {
   AsyncStorage.setItem('distance', newDistance.toString());
 };
 
+const updateLastTrackedStepCount = async () => {
+  await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+  console.log(`lastTrackedStepCount updated to ${stepCount}`);
+};
+
+
 return (
   <StatsContext.Provider
     value={{
       stepCount,
       setStepCount: updateStepCount, // Replace direct setter with our function
+      updateStepCount,
       caloriesBurned,
       setCaloriesBurned,
       distance,
@@ -209,7 +313,9 @@ return (
       isReady,
       calculateDistance, // Export the calculation function
       stepGoal, // Add this
-      setStepGoal: updateStepGoal, 
+      setStepGoal: updateStepGoal,
+      checkForNewDay,
+      updateLastTrackedStepCount
     }}
   >
     {children}

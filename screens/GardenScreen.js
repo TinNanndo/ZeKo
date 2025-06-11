@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
@@ -26,8 +26,23 @@ export default function GardenScreen({ navigation, route }) {
     useFocusEffect(
       React.useCallback(() => {
         console.log('Garden screen focused - refreshing data');
-        loadGardenData();
-        loadPurchasedFlowers();
+        
+        // Check if day has changed and we need to reset flower tracking
+        const checkDayChange = async () => {
+          const today = new Date().toISOString().split('T')[0];
+          const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
+          
+          if (lastSavedDate !== today) {
+            // Day has changed, make sure we're in sync
+            console.log('Day changed, resetting flower progress tracking');
+            await AsyncStorage.setItem('lastTrackedStepCount', '0');
+          }
+          
+          loadGardenData();
+          loadPurchasedFlowers();
+        };
+        
+        checkDayChange();
         
         return () => {
           // Cleanup if needed
@@ -192,6 +207,7 @@ export default function GardenScreen({ navigation, route }) {
           setFlowerProgressMap(resetMap);
           setGrowthProgress(0);
           await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(resetMap));
+          await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
           
           // Show completion alert
           Alert.alert(
@@ -570,6 +586,11 @@ activeFlowerContainer: {
   justifyContent: 'center',
   padding: 20,
   marginBottom: 10,
+        shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
 },
   activeFlowerImage: {
     width: 150,
@@ -640,6 +661,11 @@ progressText: {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+          shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
   },
   noFlowerTitle: {
     color: 'white',

@@ -17,7 +17,8 @@ export default function StatsScreen() {
     distance, 
     coins, 
     weeklyHistory,
-    stepGoal  // From context
+    stepGoal,
+    checkForNewDay
   } = useStats();
   const [isLoading, setIsLoading] = useState(true);
 
@@ -70,6 +71,7 @@ export default function StatsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       console.log('Stats screen focused, reloading flower stats');
+      checkForNewDay();
       loadFlowerStats();
       return () => {}; // cleanup function
     }, [])
@@ -475,11 +477,11 @@ dayButton: {
     borderRadius: 15,
     padding: 20,
     marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
-    elevation: 5,
+      shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
   },
   selectedDayTitle: {
     color: 'white',
@@ -535,11 +537,11 @@ dayButton: {
     borderRadius: 15,
     padding: 20,
     marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
-    elevation: 5,
+      shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
   },
   flowerTitle: {
     color: 'white',

@@ -11,7 +11,7 @@ import SvgBack from '../assets/icons/back.svg';
 import { FLOWER_TYPES, getFlowersByRarity } from '../context/flowerData';
 
 export default function ShopScreen({ navigation }) {
-  const { coins, setCoins } = useStats();
+  const { coins, setCoins, updateLastTrackedStepCount } = useStats();
   const [shopItems, setShopItems] = useState([]);
   const [purchasedItems, setPurchasedItems] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -47,7 +47,7 @@ export default function ShopScreen({ navigation }) {
   const getPriceByRarity = (rarity) => {
     switch(rarity) {
       case 'common':
-        return 500;
+        return 50;
       case 'uncommon':
         return 1000;
       case 'rare':
@@ -67,6 +67,7 @@ const handlePurchase = async (item) => {
 
   // Update coins
   setCoins(coins - item.price);
+  await AsyncStorage.setItem('coins', (coins - item.price).toString());
 
   // Create a unique ID for this purchase instance
   const purchaseId = `${item.id}_${Date.now()}`;
@@ -104,8 +105,7 @@ progressMap[flowerWithInstance.instanceId] = 0;
 await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(progressMap));
 await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
       await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
-await AsyncStorage.setItem('lastTrackedStepCount', '0'); // Reset step tracking      
-
+await updateLastTrackedStepCount();
       Alert.alert(
         'First Flower Purchased!', 
         `You have purchased ${item.name}. It is now set as your active flower. Return to the garden to see it grow!`,
@@ -144,8 +144,7 @@ await AsyncStorage.setItem('lastTrackedStepCount', '0'); // Reset step tracking
               
               await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
               await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
-              await AsyncStorage.setItem('lastTrackedStepCount', '0'); // Reset step count
-              
+              await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());              
               navigation.navigate('Garden', { 
                 newFlower: true,
                 flowerId: item.id,
@@ -324,6 +323,8 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   filterContainer: {
+    borderWidth: 2,
+    borderColor: '#1E3123',
     flexDirection: 'row',
     marginBottom: 16,
     backgroundColor: '#1E3123',

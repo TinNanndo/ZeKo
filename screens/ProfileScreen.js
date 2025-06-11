@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -7,10 +7,11 @@ import { useStats } from '../context/StatsContext';
 import { Picker } from '@react-native-picker/picker';
 
 import SvgAvatar from '../assets/icons/avatar.svg';
+import SvgCoins from '../assets/icons/coins.svg';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
-    const { 
+  const { 
     setStepCount, 
     setCoins, 
     stepCount, 
@@ -18,7 +19,10 @@ export default function ProfileScreen() {
     caloriesBurned, 
     distance,
     stepGoal,
-    setStepGoal
+    setStepGoal,
+    setCaloriesBurned,
+    setDistance,
+    checkForNewDay
   } = useStats();
   const [userName, setUserName] = useState('User');
   const [weight, setWeight] = useState(70);
@@ -39,6 +43,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     React.useCallback(() => {
       console.log('Profile screen focused, reloading user info');
+      checkForNewDay();
       loadUserInfo();
       return () => {}; // Cleanup function
     }, [])
@@ -115,7 +120,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const clearDataAndLogout = async () => {
+   const clearDataAndLogout = async () => {
     Alert.alert(
       "Logout",
       "Are you sure you want to log out? All progress will be reset.",
@@ -128,6 +133,8 @@ export default function ProfileScreen() {
           text: "Yes", 
           onPress: async () => {
             try {
+              console.log('Starting complete data wipe...');
+              
               // First, specifically clear critical data items to ensure nothing is missed
               
               // Flower-related data
@@ -145,25 +152,37 @@ export default function ProfileScreen() {
               await AsyncStorage.removeItem('coins');
               await AsyncStorage.removeItem('weeklyStats');
               await AsyncStorage.removeItem('lastSavedDate');
+              await AsyncStorage.removeItem('lastCoinStepCount');
+              await AsyncStorage.removeItem('recentStepRate');
               
               // User profile data
               await AsyncStorage.removeItem('userName');
               await AsyncStorage.removeItem('stepGoal');
               await AsyncStorage.removeItem('weight');
               
-              // Additional app settings
+              // App state data
+              await AsyncStorage.removeItem('appBackgroundTime');
+              await AsyncStorage.removeItem('backgroundStepCount');
               await AsyncStorage.removeItem('notificationSettings');
               await AsyncStorage.removeItem('appSettings');
               
-              // Finally clear everything else to catch any remaining items
+              // Background task persistence
+              await AsyncStorage.removeItem('backgroundTaskRegistered');
+              
+              // Finally use clear() to delete everything else that might have been missed
               await AsyncStorage.clear();
               
-              // Reset state in context if possible
+              // Reset context state
               setStepCount(0);
               setCoins(0);
+              setCaloriesBurned(0);
+              setDistance(0);
               
               console.log('All data successfully cleared before logout');
-              navigation.navigate('Login');
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
             } catch (error) {
               console.error('Error during logout data clearing:', error);
               Alert.alert('Error', 'Failed to completely log out. Please try again.');
@@ -186,10 +205,13 @@ export default function ProfileScreen() {
         { 
           text: "Reset", 
           onPress: async () => {
-            setStepCount(0);
-            setCoins(3000);
-            await AsyncStorage.setItem('stepCount', '0');
-            await AsyncStorage.setItem('coins', '0');
+            setStepCount(4990);
+            setCoins(0);
+            
+            
+            // Also reset flower growth tracking
+            await AsyncStorage.removeItem('lastTrackedStepCount');
+            
             Alert.alert("Reset Complete", "Your steps and coins have been reset to 0.");
           },
           style: "destructive"
@@ -204,64 +226,70 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <View style={styles.profileCard}>
-          <View style={styles.profileCircle}>
-            <Text style={styles.profileInitial}>{userName.charAt(0).toUpperCase()}</Text>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.profileCard}>
+            <View style={styles.avatar}>
+              <SvgAvatar width={80} height={80} />
+            </View>
           </View>
-          <Text style={styles.userName}>{userName}</Text>
+          <View style={styles.statsCard}>
+            <Text style={styles.label}>Name: <Text style={styles.value}>{userName}</Text></Text>
+            <Text style={styles.label}>Balance: <Text style={styles.value}>{formatNumber(coins)} <SvgCoins width="18" height="18" /></Text></Text>
+            <Text style={styles.label}>Daily Goal: <Text style={styles.value}>{formatNumber(stepGoal)}</Text></Text>
+            <Text style={styles.label}>Weight: <Text style={styles.value}>{weight} kg</Text></Text>
+          </View>
         </View>
-        <View style={styles.statsCard}>
-          <Text style={styles.label}>Daily Goal: <Text style={styles.value}>{formatNumber(stepGoal)} steps</Text></Text>
-          <Text style={styles.label}>Balance: <Text style={styles.value}>{formatNumber(coins)} coins</Text></Text>
-          <Text style={styles.label}>Weight: <Text style={styles.value}>{weight} kg</Text></Text>
-        </View>
-      </View>
 
-      <View style={styles.optionsCard}>
-        <Text style={styles.optionsTitle}>Settings</Text>
-        <TouchableOpacity 
-          style={styles.option}
-          onPress={openEditModal}
-        >
-          <Text style={styles.optionText}>Edit Profile</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.option}
-          onPress={() => navigation.navigate('Stats')}
-        >
-          <Text style={styles.optionText}>View Statistics</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.option}
-          onPress={resetSteps}
-        >
-          <Text style={styles.optionText}>Notification Settings</Text>
-        </TouchableOpacity>
-        
-        {/* Logout button moved here */}
-        <TouchableOpacity 
-          style={[styles.option, styles.logoutOption]}
-          onPress={clearDataAndLogout}
-        >
-          <Text style={[styles.optionText, styles.logoutText]}>Logout</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.mainContent}>
+          <View style={styles.optionsCard}>
+            <Text style={styles.optionsTitle}>Options</Text>
+            <View style={styles.optionsGrid}>
+              <TouchableOpacity 
+                style={styles.option}
+                onPress={openEditModal}
+              >
+                <Text style={styles.optionText}>Edit Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.option}
+                onPress={() => navigation.navigate('Stats')}
+              >
+                <Text style={styles.optionText}>View Stats</Text>
+              </TouchableOpacity>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.optionsTitle}>Activity Summary</Text>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{formatNumber(stepCount)}</Text>
-            <Text style={styles.summaryLabel}>Steps</Text>
+              <TouchableOpacity 
+                style={styles.option}
+                onPress={resetSteps}
+              >
+                <Text style={styles.optionText}>Restart Stats</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity 
+              style={[styles.option, styles.logoutOption]}
+              onPress={clearDataAndLogout}
+            >
+              <Text style={[styles.optionText, styles.logoutText]}>Logout</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{distance.toFixed(2)}</Text>
-            <Text style={styles.summaryLabel}>km</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{Math.round(caloriesBurned)}</Text>
-            <Text style={styles.summaryLabel}>calories</Text>
+
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Activity Summary</Text>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{formatNumber(stepCount)}</Text>
+                <Text style={styles.summaryLabel}>Steps</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{distance.toFixed(2)}</Text>
+                <Text style={styles.summaryLabel}>km</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{Math.round(caloriesBurned)}</Text>
+                <Text style={styles.summaryLabel}>cal</Text>
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -273,75 +301,216 @@ export default function ProfileScreen() {
         visible={editModalVisible}
         onRequestClose={() => setEditModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
-            
-            <Text style={styles.inputLabel}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={tempUserName}
-              onChangeText={setTempUserName}
-              placeholder="Enter your name"
-              placeholderTextColor="#999"
-            />
-            
-            <Text style={styles.inputLabel}>Daily Step Goal</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={tempStepGoal}
-                dropdownIconColor="#fff"
-                style={styles.picker}
-                onValueChange={(itemValue) => setTempStepGoal(itemValue)}
-                mode="dropdown"
-              >
-                <Picker.Item label="500 steps" value="500" />
-                <Picker.Item label="1,000 steps" value="1000" />
-                <Picker.Item label="2,500 steps" value="2500" />
-                <Picker.Item label="5,000 steps" value="5000" />
-                <Picker.Item label="7,500 steps" value="7500" />
-                <Picker.Item label="10,000 steps" value="10000" />
-                <Picker.Item label="12,500 steps" value="12500" />
-                <Picker.Item label="15,000 steps" value="15000" />
-                <Picker.Item label="20,000 steps" value="20000" />
-              </Picker>
-            </View>
-            
-            <Text style={styles.inputLabel}>Weight (kg)</Text>
-            <TextInput
-              style={styles.input}
-              value={tempWeight}
-              onChangeText={setTempWeight}
-              placeholder="Enter your weight"
-              keyboardType="decimal-pad"
-              placeholderTextColor="#999"
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]} 
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{flex: 1}}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
               
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.saveButton]} 
-                onPress={saveUserInfo}
-              >
-                <Text style={styles.buttonText}>Save</Text>
-              </TouchableOpacity>
+              <Text style={styles.inputLabel}>Username</Text>
+              <TextInput
+                style={styles.input}
+                value={tempUserName}
+                onChangeText={setTempUserName}
+                placeholder="Enter username"
+                placeholderTextColor="#888"
+              />
+              
+              <Text style={styles.inputLabel}>Daily Step Goal</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={tempStepGoal}
+                  onValueChange={setTempStepGoal}
+                  style={styles.picker}
+                  dropdownIconColor="white"
+                >
+                  <Picker.Item label="5,000 steps" value="5000" />
+                  <Picker.Item label="7,500 steps" value="7500" />
+                  <Picker.Item label="10,000 steps" value="10000" />
+                  <Picker.Item label="12,500 steps" value="12500" />
+                  <Picker.Item label="15,000 steps" value="15000" />
+                  <Picker.Item label="20,000 steps" value="20000" />
+                </Picker>
+              </View>
+              
+              <Text style={styles.inputLabel}>Weight (kg)</Text>
+              <TextInput
+                style={styles.input}
+                value={tempWeight}
+                onChangeText={setTempWeight}
+                placeholder="Enter weight in kg"
+                placeholderTextColor="#888"
+                keyboardType="numeric"
+              />
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setEditModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={saveUserInfo}
+                >
+                  <Text style={styles.buttonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  
-  // Add modal styles
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#2E4834',
+  },
+  container: {
+    flex: 1,
+    padding: 15, // Further reduced padding
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15, // Further reduced margin
+    height: '28%', // Fixed height for header section
+  },
+  mainContent: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  profileCard: {
+    backgroundColor: '#1E3123',
+    borderRadius: 15,
+    padding: 15, // Reduced padding
+    width: '42.5%', // Made narrower
+    alignItems: 'center',
+    justifyContent: 'center', // Center vertically
+          shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
+  },
+  avatar: {
+    borderWidth: 5,
+    borderColor: '#fff',
+    padding: 10,
+    backgroundColor: '#2E4834',
+    borderRadius: 100,
+  },
+  statsCard: {
+    backgroundColor: '#1E3123',
+    borderRadius: 15,
+    padding: 15, // Reduced padding
+    width: '52.5%', // Made wider for more info
+    justifyContent: 'center',
+          shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
+  },
+  label: {
+    color: '#ccc',
+    fontSize: 16, // Smaller text
+    marginVertical: 5, // Reduced margin
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  value: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  optionsCard: {
+    backgroundColor: '#1E3123',
+    borderRadius: 15,
+    padding: 15, // Reduced padding
+    marginBottom: 15, // Reduced margin
+          shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
+  },
+    optionsTitle: {
+    fontWeight: 'bold',
+    fontSize: 24, // Smaller text
+    color: 'white',
+    marginBottom: 20, // Reduced margin
+  },
+  optionsGrid: {
+    flexDirection: 'col',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  option: {
+    backgroundColor: '#2E4834',
+    padding: 10, // Reduced padding
+    borderRadius: 10,
+    marginBottom: 15, // Reduced margin
+  },
+  logoutOption: {
+    backgroundColor: '#9F2A2A',
+    marginTop: 20, // Removed margin
+    width: '100%',
+  },
+  optionText: {
+    color: 'white',
+    fontSize: 16, // Smaller text
+    textAlign: 'center',
+  },
+  logoutText: {
+    fontWeight: 'bold',
+  },
+  summaryCard: {
+    backgroundColor: '#1E3123',
+    borderRadius: 15,
+    padding: 15, // Reduced padding
+          shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  elevation: 2,
+  },
+  summaryTitle: {
+    textAlign: 'center',
+    fontWeight: 'bold',
+    fontSize: 24, // Smaller text
+    color: 'white',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  summaryItem: {
+    flex: 1,
+    margin: 5,
+    alignItems: 'center',
+    backgroundColor: '#2E4834',
+    borderRadius: 10,
+    padding: 15,
+
+  },
+  summaryValue: {
+    color: 'white',
+    fontSize: 18, // Smaller text
+    fontWeight: 'bold',
+  },
+  summaryLabel: {
+    color: '#ccc',
+    fontSize: 12, // Smaller text
+    marginTop: 2, // Reduced margin
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -403,119 +572,9 @@ const styles = StyleSheet.create({
     height: 50,
     width: '100%',
   },
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#2E4834',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  profileCard: {
-    backgroundColor: '#1E3123',
-    borderRadius: 15,
-    padding: 20,
-    width: '45%',
-    alignItems: 'center',
-  },
-  profileCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 2,
-    borderColor: 'white',
-    backgroundColor: '#365B41',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInitial: {
-    fontSize: 32,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  userName: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 10,
-  },
-  statsCard: {
-    backgroundColor: '#1E3123',
-    borderRadius: 15,
-    padding: 20,
-    width: '45%',
-    justifyContent: 'center',
-  },
-  label: {
-    color: '#ccc',
-    fontSize: 14,
-    marginVertical: 5,
-  },
-  value: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  optionsCard: {
-    backgroundColor: '#1E3123',
-    marginHorizontal: 20,
-    borderRadius: 15,
-    padding: 20,
-    marginVertical: 10,
-  },
-  summaryCard: {
-    backgroundColor: '#1E3123',
-    marginHorizontal: 20,
-    borderRadius: 15,
-    padding: 20,
-    marginVertical: 10,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  summaryItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  summaryValue: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  summaryLabel: {
-    color: '#ccc',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  optionsTitle: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    color: 'white',
-    marginBottom: 15,
-  },
-  option: {
-    backgroundColor: '#365B41',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  optionText: {
-    color: 'white',
-    fontSize: 16,
-  },
   buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-    logoutOption: {
-    backgroundColor: '#9F2A2A', // Red background for logout
-    marginTop: 15, // Add more spacing above the logout button
-  },
-  logoutText: {
-    fontWeight: 'bold', // Make the logout text bold
   },
 });

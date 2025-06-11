@@ -42,6 +42,9 @@ export default function LoginScreen() {
       try {
         const currentDate = new Date().toISOString().split('T')[0];
         
+        // Clear any previous data first (in case of reinstalling app or clearing app data)
+        await AsyncStorage.clear();
+        
         // Save user info
         await AsyncStorage.setItem('userName', name);
         await AsyncStorage.setItem('stepGoal', stepGoal);
@@ -54,6 +57,13 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('coins', '0');
         await AsyncStorage.setItem('lastSavedDate', currentDate);
         await AsyncStorage.setItem('weeklyStats', JSON.stringify([]));
+        
+        // Explicitly ensure no flower data exists for new users
+        await AsyncStorage.removeItem('activeFlower');
+        await AsyncStorage.removeItem('flowerProgressMap');
+        await AsyncStorage.removeItem('shopPurchases');
+        await AsyncStorage.removeItem('grownFlowers');
+        await AsyncStorage.removeItem('lastTrackedStepCount');
         
         // Navigate to home screen
         navigation.replace('Home');

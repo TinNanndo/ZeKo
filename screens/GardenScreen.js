@@ -3,119 +3,134 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, Alert
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
-import { FLOWER_TYPES, getLeastRepresentedFlower } from '../context/flowerData';
+import { FLOWER_TYPES } from '../context/flowerData';
 import { useFocusEffect } from '@react-navigation/native';
 
-// Icons
+// Uvoz ikona
 import SvgCoins from '../assets/icons/coins.svg';
 import SvgShop from '../assets/icons/shop.svg';
-// Removed SvgSwap import
 
+/**
+ * GardenScreen - Zaslon za upravljanje virtualnim vrtom
+ * 
+ * Glavni zaslon za uzgoj virtualnog cvijeća koji omogućuje sljedeće funkcionalnosti:
+ * 1. Praćenje rasta aktivnog cvijeta na temelju broja koraka
+ * 2. Pregled kolekcije uzgojenog cvijeća
+ * 3. Odabir cvijeta za uzgoj
+ * 4. Kupnju novog cvijeća u trgovini
+ */
 export default function GardenScreen({ navigation, route }) {
+  // --- STANJE APLIKACIJE ---
+  
+  // Podatci iz konteksta statistike
   const { stepCount, coins } = useStats();
-  const [activeFlower, setActiveFlower] = useState(null);
-  const [grownFlowers, setGrownFlowers] = useState([]);
-  const [growthProgress, setGrowthProgress] = useState(0);
-  const [showCollection, setShowCollection] = useState(false);
-  const [showFlowerSelector, setShowFlowerSelector] = useState(false);
-  const [purchasedFlowers, setPurchasedFlowers] = useState([]);
-  const [flowerProgressMap, setFlowerProgressMap] = useState({});
+  
+  // Stanje cvijeća u vrtu
+  const [activeFlower, setActiveFlower] = useState(null);          // Trenutno aktivni cvijet
+  const [grownFlowers, setGrownFlowers] = useState([]);           // Uzgojeno cvijeće
+  const [growthProgress, setGrowthProgress] = useState(0);        // Napredak rasta aktivnog cvijeta
+  const [purchasedFlowers, setPurchasedFlowers] = useState([]);   // Kupljeno cvijeće
+  const [flowerProgressMap, setFlowerProgressMap] = useState({}); // Mapa napretka za svaki cvijet
+  
+  // Stanje sučelja
+  const [showCollection, setShowCollection] = useState(false);       // Prikaz kolekcije ili aktivnog cvijeta
+  const [showFlowerSelector, setShowFlowerSelector] = useState(false); // Prikaz modalnog prozora za odabir cvijeta
 
-
-    // Make sure this is in your component
-    useFocusEffect(
-      React.useCallback(() => {
-        console.log('Garden screen focused - refreshing data');
+  // --- UČITAVANJE I INICIJALIZACIJA PODATAKA ---
+  
+  /**
+   * Osvježavanje podataka kad se zaslon fokusira
+   * Provjerava je li nastupio novi dan i učitava podatke o vrtu
+   */
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkDayChange = async () => {
+        const today = new Date().toISOString().split('T')[0];
+        const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
         
-        // Check if day has changed and we need to reset flower tracking
-        const checkDayChange = async () => {
-          const today = new Date().toISOString().split('T')[0];
-          const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
-          
-          if (lastSavedDate !== today) {
-            // Day has changed, make sure we're in sync
-            console.log('Day changed, resetting flower progress tracking');
-            await AsyncStorage.setItem('lastTrackedStepCount', '0');
-          }
-          
-          loadGardenData();
-          loadPurchasedFlowers();
-        };
+        if (lastSavedDate !== today) {
+          // Novi dan, resetiraj praćenje koraka za cvijet
+          await AsyncStorage.setItem('lastTrackedStepCount', '0');
+        }
         
-        checkDayChange();
-        
-        return () => {
-          // Cleanup if needed
-        };
-      }, [])
-    );
-
-  useEffect(() => {
-  const unsubscribe = navigation.addListener('focus', () => {
-    // Check for route params indicating a new flower purchase
-    if (route.params?.newFlower) {
-      console.log('New flower purchased:', route.params.flowerId);
-      
-      // Clear the params to prevent re-processing
-      navigation.setParams({ newFlower: undefined });
-      
-      // Force refresh of purchased flowers
-      loadPurchasedFlowers();
-      
-      // If this flower should be active, refresh the active flower too
-      if (route.params?.makeActive) {
+        // Učitaj podatke o vrtu i kupljenim cvjetovima
         loadGardenData();
+        loadPurchasedFlowers();
+      };
+      
+      checkDayChange();
+      
+      return () => {};
+    }, [])
+  );
+
+  /**
+   * Provjera parametara rute za novo kupljeno cvijeće
+   * Ažurira se kada korisnik kupi novi cvijet u trgovini
+   */
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (route.params?.newFlower) {
+        // Izbjegavanje višestrukog osvježavanja
+        navigation.setParams({ newFlower: undefined });
+        
+        // Osvježi listu kupljenog cvijeća
+        loadPurchasedFlowers();
+        
+        // Ako cvijet treba postati aktivan, osvježi i to
+        if (route.params?.makeActive) {
+          loadGardenData();
+        }
       }
-    }
-  });
+    });
 
-  return unsubscribe;
-}, [navigation, route]);
+    return unsubscribe;
+  }, [navigation, route]);
 
-  // Load garden data
+  /**
+   * Početno učitavanje podataka o vrtu
+   */
   useEffect(() => {
     loadGardenData();
   }, []);
 
+  /**
+   * Učitavanje kupljenog cvijeća iz pohrane
+   * Obrađuje svaki kupljeni cvijet i dodaje mu podatke o primjerku
+   */
   const loadPurchasedFlowers = async () => {
     try {
       const purchases = await AsyncStorage.getItem('shopPurchases');
       if (purchases) {
         const purchasedItems = JSON.parse(purchases);
         
-        // Create a map to count instances of each flower type
+        // Brojanje primjeraka svakog tipa cvijeta
         const flowerCounts = {};
         purchasedItems.forEach(item => {
-          if (flowerCounts[item.id]) {
-            flowerCounts[item.id]++;
-          } else {
-            flowerCounts[item.id] = 1;
-          }
+          flowerCounts[item.id] = (flowerCounts[item.id] || 0) + 1;
         });
         
-        // Create properly formatted flower objects
+        // Stvaranje objekata cvijeća s podacima o primjerku
         const flowersWithCounts = [];
         
-        // Process each purchased item
         purchasedItems.forEach((purchaseItem, index) => {
-          // Find the flower type details
           const flowerType = FLOWER_TYPES.find(f => f.id === purchaseItem.id);
           
           if (flowerType) {
-            // Calculate instance number for this specific purchase
+            // Izračun broja primjerka ovog cvijeta
             const sameTypeItems = purchasedItems.filter(
               (p, i) => p.id === purchaseItem.id && i <= index
             );
             const instanceNumber = sameTypeItems.length;
             
-            // Create instance ID
+            // Stvaranje jedinstvenog ID-a za ovaj primjerak
             const instanceId = `${purchaseItem.id}_instance${instanceNumber - 1}`;
             
-            // Create flower with instance data
+            // Stvaranje objekta s podacima o primjerku
             const flowerWithInstance = {
               ...flowerType,
-              instanceId: instanceId,
-              instanceNumber: instanceNumber,
+              instanceId,
+              instanceNumber,
               purchaseId: purchaseItem.purchaseId,
               count: flowerCounts[purchaseItem.id]
             };
@@ -124,77 +139,76 @@ export default function GardenScreen({ navigation, route }) {
           }
         });
         
-        console.log(`Loaded ${flowersWithCounts.length} purchased flowers`);
         setPurchasedFlowers(flowersWithCounts);
       } else {
         setPurchasedFlowers([]);
       }
     } catch (error) {
-      console.error('Error loading purchased flowers:', error);
+      console.error('Greška pri učitavanju kupljenog cvijeća:', error);
       setPurchasedFlowers([]);
     }
   };
 
-  // Update your growth update effect in GardenScreen.js
+  // --- PRAĆENJE RASTA CVIJETA ---
+
+  /**
+   * Praćenje napretka rasta cvijeta na temelju koraka
+   * Automatski ažurira napredak kad korisnik napravi korake
+   */
   useEffect(() => {
     if (!activeFlower) return;
     
     const updateGrowth = async () => {
       try {
-        // Calculate the step progress since last update
+        // Dohvat zadnjeg broja koraka
         const lastStepCount = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
         
-        // Only proceed if we have more steps than last time
-        if (stepCount <= lastStepCount) {
-          return;
-        }
+        // Provjera ima li novih koraka
+        if (stepCount <= lastStepCount) return;
         
-        // Calculate new steps since last update
+        // Izračun novih koraka
         const stepsSinceLastUpdate = stepCount - lastStepCount;
-        console.log(`New steps detected: ${stepsSinceLastUpdate}`);
-        
-        // Update the last tracked step count
         await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
         
-        // Calculate growth multiplier based on flower rarity
-        let growthMultiplier = 1; // Default multiplier
+        // Određivanje množitelja rasta prema rijetkosti cvijeta
+        let growthMultiplier = 1;
         
-        // Apply multipliers based on flower properties
-        if (activeFlower.rarity === 'legendary') {
-          growthMultiplier = 2.0; // Legendary flowers grow twice as fast
-        } else if (activeFlower.rarity === 'rare') {
-          growthMultiplier = 1.5; // Rare flowers grow 50% faster
-        } else if (activeFlower.rarity === 'uncommon') {
-          growthMultiplier = 1.2; // Uncommon flowers grow 20% faster
+        switch (activeFlower.rarity) {
+          case 'legendary':
+            growthMultiplier = 2.0; // 2x brži rast za legendarno cvijeće
+            break;
+          case 'rare':
+            growthMultiplier = 1.5; // 1.5x brži rast za rijetko cvijeće
+            break;
+          case 'uncommon':
+            growthMultiplier = 1.2; // 1.2x brži rast za neuobičajeno cvijeće
+            break;
         }
         
-        // Apply the multiplier to the steps
+        // Primjena množitelja na korake
         const effectiveSteps = Math.round(stepsSinceLastUpdate * growthMultiplier);
         
-        // Get current progress for this flower
+        // Dohvat trenutnog napretka i izračun novog
         const currentProgress = flowerProgressMap[activeFlower.instanceId] || 0;
-        
-        // Calculate the new progress
         const newProgress = currentProgress + effectiveSteps;
-        console.log(`Updating growth progress for ${activeFlower.name}: ${currentProgress} + ${effectiveSteps} = ${newProgress}`);
         
-        // Update state
+        // Ažuriranje stanja
         setGrowthProgress(newProgress);
         
-        // Update the progress map
+        // Ažuriranje mape napretka u stanju i pohrani
         const updatedMap = {...flowerProgressMap, [activeFlower.instanceId]: newProgress};
         setFlowerProgressMap(updatedMap);
         await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(updatedMap));
         
-        // Check if flower is fully grown
+        // Provjera je li cvijet potpuno izrastao
         if (newProgress >= activeFlower.stepsToGrow) {
-          console.log('Flower fully grown! Processing completion...');
-          // Add to grown flowers collection
+          // Dodavanje u kolekciju uzgojenog cvijeća
           const newGrownFlower = {
             ...activeFlower,
             grownAt: Date.now()
           };
           
+          // Ažuriranje liste uzgojenog cvijeća
           const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
           const currentGrownFlowers = storedGrownFlowers ? JSON.parse(storedGrownFlowers) : [];
           currentGrownFlowers.push(newGrownFlower);
@@ -202,114 +216,123 @@ export default function GardenScreen({ navigation, route }) {
           await AsyncStorage.setItem('grownFlowers', JSON.stringify(currentGrownFlowers));
           setGrownFlowers(currentGrownFlowers);
           
-          // Reset progress for this flower
+          // Resetiranje napretka za ovaj cvijet
           const resetMap = {...updatedMap, [activeFlower.instanceId]: 0};
           setFlowerProgressMap(resetMap);
           setGrowthProgress(0);
           await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(resetMap));
           await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
           
-          // Show completion alert
+          // Obavijest o završetku uzgoja
           Alert.alert(
-            'Flower Grown!',
-            `Your ${activeFlower.name} has fully grown and been added to your collection!`,
+            'Flower has grown!',
+            `Your ${activeFlower.name} has fully grown and was added to your collection!`,
             [{ text: 'Great!', style: 'default' }]
           );
         }
       } catch (error) {
-        console.error('Error updating growth:', error);
+        console.error('Greška pri ažuriranju rasta:', error);
       }
     };
     
-    // Run immediately when component mounts or active flower changes
+    // Pokreni odmah i zatim svakih 5 sekundi
     updateGrowth();
-    
-    // Set up interval to check for step updates
     const stepCheckInterval = setInterval(updateGrowth, 5000);
     
-    return () => {
-      clearInterval(stepCheckInterval);
-    };
+    return () => clearInterval(stepCheckInterval);
   }, [stepCount, activeFlower, flowerProgressMap]);
   
-const loadGardenData = async () => {
-  try {
-    const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
-    const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
-    const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
-    
-    // Load the flower progress map
-    let progressMap = {};
-    if (storedFlowerProgress) {
-      progressMap = JSON.parse(storedFlowerProgress);
-      setFlowerProgressMap(progressMap);
-    }
-    
-    // Also initialize lastTrackedStepCount with current stepCount if not exists
-    const lastTrackedStep = await AsyncStorage.getItem('lastTrackedStepCount');
-    if (!lastTrackedStep) {
-      await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
-    }
-    
-    // Load grown flowers
-    let localGrownFlowers = [];
-    if (storedGrownFlowers) {
-      localGrownFlowers = JSON.parse(storedGrownFlowers);
-      setGrownFlowers(localGrownFlowers);
-    }
-    
-    // Load active flower if it exists
-    if (storedActiveFlower && storedActiveFlower !== 'null') {
-      const flower = JSON.parse(storedActiveFlower);
-      setActiveFlower(flower);
+  /**
+   * Učitavanje podataka o vrtu iz trajne pohrane
+   * Dohvaća aktivni cvijet, uzgojeno cvijeće i mapu napretka
+   */
+  const loadGardenData = async () => {
+    try {
+      const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
+      const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
+      const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
       
-      // Set the growth progress for the active flower
-      if (flower.instanceId && progressMap[flower.instanceId] !== undefined) {
-        setGrowthProgress(progressMap[flower.instanceId]);
-      } else {
-        // Default to 0 if no progress is saved
-        setGrowthProgress(0);
+      // Učitavanje mape napretka cvijeta
+      if (storedFlowerProgress) {
+        const progressMap = JSON.parse(storedFlowerProgress);
+        setFlowerProgressMap(progressMap);
       }
-    } else {
-      // Your existing code for selecting a default flower
+      
+      // Inicijalizacija praćenja koraka ako ne postoji
+      const lastTrackedStep = await AsyncStorage.getItem('lastTrackedStepCount');
+      if (!lastTrackedStep) {
+        await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+      }
+      
+      // Učitavanje uzgojenog cvijeća
+      if (storedGrownFlowers) {
+        setGrownFlowers(JSON.parse(storedGrownFlowers));
+      }
+      
+      // Učitavanje aktivnog cvijeta
+      if (storedActiveFlower && storedActiveFlower !== 'null') {
+        const flower = JSON.parse(storedActiveFlower);
+        setActiveFlower(flower);
+        
+        // Postavljanje napretka za aktivni cvijet
+        if (flower.instanceId) {
+          const progressMap = storedFlowerProgress ? JSON.parse(storedFlowerProgress) : {};
+          setGrowthProgress(progressMap[flower.instanceId] || 0);
+        } else {
+          setGrowthProgress(0);
+        }
+      }
+    } catch (error) {
+      console.error('Greška pri učitavanju podataka o vrtu:', error);
+      setActiveFlower(null);
     }
-  } catch (error) {
-    console.error('Error loading garden data:', error);
-    setActiveFlower(null);
-  }
-};
+  };
 
+  // --- FUNKCIJE KORISNIČKOG SUČELJA ---
+
+  /**
+   * Navigacija na zaslon trgovine
+   */
   const navigateToShop = () => {
     navigation.navigate('Shop');
   };
 
+  /**
+   * Odabir cvijeta za uzgoj
+   * @param {Object} flower - Cvijet koji će postati aktivan
+   */
   const selectFlower = async (flower) => {
     try {
-      // Set the active flower
+      // Postavljanje odabranog cvijeta kao aktivnog
       setActiveFlower(flower);
       await AsyncStorage.setItem('activeFlower', JSON.stringify(flower));
       
-      // Reset the step tracking point to current steps
+      // Resetiranje praćenja koraka
       await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
       
-      // Load the correct progress for this flower instance
+      // Postavljanje ispravnog napretka za ovaj cvijet
       if (flower.instanceId && flowerProgressMap[flower.instanceId] !== undefined) {
         setGrowthProgress(flowerProgressMap[flower.instanceId]);
       } else {
-        // If no progress exists for this flower, start at 0
+        // Početak s 0 ako ne postoji prethodni napredak
         setGrowthProgress(0);
-        // Update the progress map with the new flower
         const updatedMap = {...flowerProgressMap, [flower.instanceId]: 0};
         setFlowerProgressMap(updatedMap);
         await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(updatedMap));
       }
       
+      // Zatvaranje modalnog prozora za odabir
       setShowFlowerSelector(false);
     } catch (error) {
-      console.error('Error selecting flower:', error);
+      console.error('Greška pri odabiru cvijeta:', error);
     }
   };
 
+  // --- KOMPONENTE ZA RENDERIRANJE ---
+
+  /**
+   * Renderiranje stavke uzgojenog cvijeta u kolekciji
+   */
   const renderFlowerItem = ({ item }) => (
     <View style={styles.flowerItem}>
       <Image source={item.image} style={styles.flowerImage} />
@@ -320,6 +343,9 @@ const loadGardenData = async () => {
     </View>
   );
 
+  /**
+   * Renderiranje stavke cvijeta u izborniku za odabir
+   */
   const renderSelectorFlowerItem = ({ item }) => (
     <TouchableOpacity 
       style={[
@@ -333,7 +359,7 @@ const loadGardenData = async () => {
         <Text style={styles.selectorFlowerName}>{item.name}</Text>
         <Text style={styles.selectorFlowerSteps}>
           {activeFlower?.id === item.id 
-            ? `${activeFlower.stepsToGrow - growthProgress} steps left to grow`
+            ? `${activeFlower.stepsToGrow - growthProgress} more steps to grow`
             : `${item.stepsToGrow} steps to grow`
           }
         </Text>
@@ -346,18 +372,17 @@ const loadGardenData = async () => {
     </TouchableOpacity>
   );
 
+  // --- GLAVNI RENDER ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Top Bar */}
+        {/* Gornja traka s novčićima i gumbom za trgovinu */}
         <View style={styles.topBar}>
-          {/* Coin Balance */}
           <View style={styles.coinsContainer}>
             <Text style={styles.coinsText}>{coins}</Text>
             <SvgCoins width={24} height={24} />
           </View>
 
-          {/* Shop Icon */}
           <TouchableOpacity 
             style={styles.shopButton}
             onPress={navigateToShop}
@@ -366,7 +391,7 @@ const loadGardenData = async () => {
           </TouchableOpacity>
         </View>
 
-        {/* Toggle View */}
+        {/* Prekidač za izbor prikaza (uzgoj/kolekcija) */}
         <View style={styles.toggleContainer}>
           <TouchableOpacity 
             style={[styles.toggleButton, !showCollection && styles.activeToggle]}
@@ -382,107 +407,106 @@ const loadGardenData = async () => {
           </TouchableOpacity>
         </View>
 
-        {/* Main Content */}
-{!showCollection ? (
-  <View style={styles.gardenContainer}>          
-    {activeFlower ? (
-      <>
-        <View style={styles.activeFlowerContainer}>
-          <View style={styles.flowerHeader}>
-            <Text style={styles.flowerNameLabel}>{activeFlower.name}</Text>
-          </View>
-          <Image 
-            source={activeFlower.image} 
-            style={styles.activeFlowerImage} 
-          />
-          <View style={styles.progressBarContainer}>
-            <View 
-              style={[
-                styles.progressBar, 
-                { 
-                  width: `${Math.min((growthProgress / activeFlower.stepsToGrow) * 100, 100)}%`
-                }
-              ]}
-            />
-          </View>
-          <Text style={styles.progressText}>
-            {growthProgress}/{activeFlower.stepsToGrow} steps 
-            ({Math.round((growthProgress / activeFlower.stepsToGrow) * 100)}%)
-          </Text>
-        </View>
-        
-        {/* Purchased Flowers Preview */}
-        {purchasedFlowers.length > 0 && (
-          <View style={styles.purchasedFlowersContainer}>
-            <Text style={styles.purchasedFlowersTitle}>Your Flowers</Text>
-            <FlatList
-              data={purchasedFlowers}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={[
-                    styles.purchasedFlowerItem,
-                    activeFlower?.instanceId === item.instanceId && styles.activePurchasedFlower
-                  ]}
-                  onPress={() => selectFlower(item)}
-                >
+        {/* Prikaz zaslona za uzgoj ili kolekcije ovisno o izboru */}
+        {!showCollection ? (
+          <View style={styles.gardenContainer}>          
+            {activeFlower ? (
+              <>
+                {/* Prikaz aktivnog cvijeta i trake napretka */}
+                <View style={styles.activeFlowerContainer}>
+                  <View style={styles.flowerHeader}>
+                    <Text style={styles.flowerNameLabel}>{activeFlower.name}</Text>
+                  </View>
                   <Image 
-                    source={item.image} 
-                    style={styles.purchasedFlowerImage} 
+                    source={activeFlower.image} 
+                    style={styles.activeFlowerImage} 
                   />
-                  <Text style={styles.purchasedFlowerName} numberOfLines={1}>
-                    {item.name} {item.count > 1 ? `(${item.instanceNumber})` : ''}
+                  <View style={styles.progressBarContainer}>
+                    <View 
+                      style={[
+                        styles.progressBar, 
+                        { width: `${Math.min((growthProgress / activeFlower.stepsToGrow) * 100, 100)}%` }
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {growthProgress}/{activeFlower.stepsToGrow} steps 
+                    ({Math.round((growthProgress / activeFlower.stepsToGrow) * 100)}%)
                   </Text>
-                  {activeFlower?.instanceId === item.instanceId && (
-                    <View style={styles.purchasedActiveIndicator} />
-                  )}
-                  {activeFlower?.instanceId === item.instanceId && (
-                    <Text style={styles.stepsLeftText}>
-                      {activeFlower.stepsToGrow - growthProgress} steps
-                    </Text>
-                  )}
+                </View>
+                
+                {/* Prikaz kupljenog cvijeća */}
+                {purchasedFlowers.length > 0 && (
+                  <View style={styles.purchasedFlowersContainer}>
+                    <Text style={styles.purchasedFlowersTitle}>Your Flowers</Text>
+                    <FlatList
+                      data={purchasedFlowers}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity 
+                          style={[
+                            styles.purchasedFlowerItem,
+                            activeFlower?.instanceId === item.instanceId && styles.activePurchasedFlower
+                          ]}
+                          onPress={() => selectFlower(item)}
+                        >
+                          <Image 
+                            source={item.image} 
+                            style={styles.purchasedFlowerImage} 
+                          />
+                          <Text style={styles.purchasedFlowerName} numberOfLines={1}>
+                            {item.name} {item.count > 1 ? `(${item.instanceNumber})` : ''}
+                          </Text>
+                          {activeFlower?.instanceId === item.instanceId && (
+                            <View style={styles.purchasedActiveIndicator} />
+                          )}
+                          {activeFlower?.instanceId === item.instanceId && (
+                            <Text style={styles.stepsLeftText}>
+                              {activeFlower.stepsToGrow - growthProgress} steps
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      keyExtractor={item => item.instanceId || item.id}
+                      numColumns={3}
+                      contentContainerStyle={styles.purchasedFlowersList}
+                    />
+                  </View>
+                )}
+              </>
+            ) : (
+              // Prikaz kad nema aktivnog cvijeta
+              <View style={styles.noFlowerContainer}>
+                <Text style={styles.noFlowerTitle}>No Active Flower</Text>
+                <Text style={styles.noFlowerText}>
+                  You don't have any flowers yet! Collect coins by walking and buy your first flower in the shop.
+                </Text>
+                <TouchableOpacity 
+                  style={styles.shopButtonLarge}
+                  onPress={navigateToShop}
+                >
+                  <Text style={styles.shopButtonText}>Go to Shop</Text>
+                  <SvgShop width={24} height={24} />
                 </TouchableOpacity>
-              )}
-              keyExtractor={item => item.instanceId || item.id}
-              numColumns={3}
-              contentContainerStyle={styles.purchasedFlowersList}
-            />
+              </View>
+            )}
           </View>
+        ) : (
+          // Prikaz kolekcije uzgojenog cvijeća
+          <FlatList
+            data={grownFlowers}
+            renderItem={renderFlowerItem}
+            keyExtractor={item => item.id}
+            numColumns={2}
+            contentContainerStyle={styles.collectionContainer}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>
+                You haven't grown any flowers yet. Start walking to grow your first flowers!
+              </Text>
+            }
+          />
         )}
-      </>
-    ) : (
-      // No changes to the "No Flower Selected" view
-      <View style={styles.noFlowerContainer}>
-        <Text style={styles.noFlowerTitle}>No Flower Selected</Text>
-        <Text style={styles.noFlowerText}>
-          You don't have any flowers yet! Collect coins by walking and buy your first flower from the shop.
-        </Text>
-        <TouchableOpacity 
-          style={styles.shopButtonLarge}
-          onPress={navigateToShop}
-        >
-          <Text style={styles.shopButtonText}>Go to Shop</Text>
-          <SvgShop width={24} height={24} />
-        </TouchableOpacity>
-      </View>
-    )}
-  </View>
-) : (
-  // No changes to the Collection view
-  <FlatList
-    data={grownFlowers}
-    renderItem={renderFlowerItem}
-    keyExtractor={item => item.id}
-    numColumns={2}
-    contentContainerStyle={styles.collectionContainer}
-    ListEmptyComponent={
-      <Text style={styles.emptyText}>
-        You haven't grown any flowers yet. Start walking to grow some!
-      </Text>
-    }
-  />
-)}
 
-        {/* Flower Selector Modal - we keep this since it's triggered by clicking on flowers */}
+        {/* Modalni prozor za odabir cvijeta */}
         <Modal
           visible={showFlowerSelector}
           animationType="slide"
@@ -515,6 +539,7 @@ const loadGardenData = async () => {
   );
 }
 
+// --- STILOVI ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -701,7 +726,6 @@ progressText: {
     alignItems: 'center',
     marginBottom: 10,
   },
-  // Removed changeFlowerButton and changeFlowerText styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -845,7 +869,7 @@ progressText: {
 purchasedFlowersContainer: {
   width: '100%',
   marginTop: 20,
-  flex: 1, // Allow container to expand
+  flex: 1,
 },
 purchasedFlowersTitle: {
   color: 'white',

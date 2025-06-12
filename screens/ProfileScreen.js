@@ -1,16 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useStats } from '../context/StatsContext';
 import { Picker } from '@react-native-picker/picker';
 
+// Uvoz SVG ikona
 import SvgAvatar from '../assets/icons/avatar.svg';
 import SvgCoins from '../assets/icons/coins.svg';
 
+/**
+ * ProfileScreen - Zaslon profila korisnika
+ * 
+ * Omogućuje:
+ * 1. Pregled profila i osnovnih podataka korisnika
+ * 2. Uređivanje korisničkih podataka (ime, cilj koraka, težina)
+ * 3. Pregled sažetka aktivnosti (koraci, kalorije, udaljenost)
+ * 4. Pristup drugim funkcijama (statistika, odjava)
+ */
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  
+  // --- STANJE IZ KONTEKSTA STATISTIKE ---
   const { 
     setStepCount, 
     setCoins, 
@@ -24,40 +36,42 @@ export default function ProfileScreen() {
     setDistance,
     checkForNewDay
   } = useStats();
+  
+  // --- LOKALNO STANJE PROFILA ---
   const [userName, setUserName] = useState('User');
   const [weight, setWeight] = useState(70);
   
-  
-  // Add state for edit modal
+  // --- STANJE ZA MODALNI PROZOR UREĐIVANJA ---
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [tempUserName, setTempUserName] = useState('');
   const [tempStepGoal, setTempStepGoal] = useState('');
   const [tempWeight, setTempWeight] = useState('');
   
-  // Load user info initially
+  // --- UČITAVANJE PODATAKA ---
+  
+  /**
+   * Inicijalno učitavanje korisničkih podataka
+   */
   useEffect(() => {
     loadUserInfo();
   }, []);
 
-  // Add this to reload user info when the screen comes into focus
+  /**
+   * Osvježavanje podataka kada se zaslon fokusira
+   */
   useFocusEffect(
     React.useCallback(() => {
-      console.log('Profile screen focused, reloading user info');
       checkForNewDay();
       loadUserInfo();
-      return () => {}; // Cleanup function
+      return () => {};
     }, [])
   );
   
-  // Also respond to changes in stepCount and coins from context
-  useEffect(() => {
-    console.log('Stats updated in context:', { stepCount, coins });
-    // No need to reload everything, as these values are already updated by the context
-  }, [stepCount, coins, caloriesBurned, distance]);
-  
+  /**
+   * Učitavanje korisničkih podataka iz AsyncStorage-a
+   */
   const loadUserInfo = async () => {
     try {
-      // Load user info
       const name = await AsyncStorage.getItem('userName');
       const storedStepGoal = await AsyncStorage.getItem('stepGoal');
       const storedWeight = await AsyncStorage.getItem('weight');
@@ -65,24 +79,31 @@ export default function ProfileScreen() {
       if (name) setUserName(name);
       if (storedStepGoal) setStepGoal(parseInt(storedStepGoal, 10));
       if (storedWeight) setWeight(parseFloat(storedWeight));
-      
-      console.log('Loaded user profile:', { name, stepGoal: storedStepGoal, weight: storedWeight });
     } catch (error) {
-      console.error('Error loading user info:', error);
+      console.error('Greška pri učitavanju korisničkih podataka:', error);
     }
   };
 
+  // --- UREĐIVANJE PROFILA ---
+  
+  /**
+   * Otvaranje modalnog prozora za uređivanje profila
+   * Inicijalizira privremene vrijednosti s trenutnim podacima
+   */
   const openEditModal = () => {
-    // Initialize temp values with current values
     setTempUserName(userName);
-    setTempStepGoal(stepGoal.toString()); // Make sure it's a string for Picker
+    setTempStepGoal(stepGoal.toString());
     setTempWeight(weight.toString());
     setEditModalVisible(true);
   };
 
+  /**
+   * Spremanje ažuriranih korisničkih podataka
+   * Obavlja validaciju prije spremanja
+   */
   const saveUserInfo = async () => {
     try {
-      // Validate input
+      // Validacija unosa
       const newStepGoal = parseInt(tempStepGoal, 10);
       const newWeight = parseFloat(tempWeight);
       
@@ -101,29 +122,34 @@ export default function ProfileScreen() {
         return;
       }
       
-      // Save to AsyncStorage
+      // Spremanje u AsyncStorage
       await AsyncStorage.setItem('userName', tempUserName);
-      // Use context method to update stepGoal
-      setStepGoal(newStepGoal);
+      await AsyncStorage.setItem('stepGoal', newStepGoal.toString());
       await AsyncStorage.setItem('weight', tempWeight);
       
-      // Update state
+      // Ažuriranje lokalnog stanja
       setUserName(tempUserName);
-      // No need to set stepGoal here as it's handled by context
+      setStepGoal(newStepGoal);
       setWeight(newWeight);
       
       setEditModalVisible(false);
       Alert.alert('Success', 'Profile updated successfully!');
     } catch (error) {
-      console.error('Error saving user info:', error);
+      console.error('Greška pri spremanju korisničkih podataka:', error);
       Alert.alert('Error', 'Failed to update profile');
     }
   };
 
-   const clearDataAndLogout = async () => {
+  // --- FUNKCIJE ZA BRISANJE PODATAKA ---
+  
+  /**
+   * Odjava korisnika i brisanje svih podataka aplikacije
+   * Traži potvrdu prije izvršavanja
+   */
+  const clearDataAndLogout = async () => {
     Alert.alert(
-      "Logout",
-      "Are you sure you want to log out? All progress will be reset.",
+      "Log Out",
+      "Are you sure you want to log out? All progress will be deleted.",
       [
         {
           text: "Cancel",
@@ -133,59 +159,23 @@ export default function ProfileScreen() {
           text: "Yes", 
           onPress: async () => {
             try {
-              console.log('Starting complete data wipe...');
-              
-              // First, specifically clear critical data items to ensure nothing is missed
-              
-              // Flower-related data
-              await AsyncStorage.removeItem('flowerProgressMap');
-              await AsyncStorage.removeItem('activeFlower');
-              await AsyncStorage.removeItem('grownFlowers');
-              await AsyncStorage.removeItem('shopPurchases');
-              await AsyncStorage.removeItem('lastTrackedStepCount');
-              await AsyncStorage.removeItem('growthProgress');
-              
-              // Stats-related data
-              await AsyncStorage.removeItem('stepCount');
-              await AsyncStorage.removeItem('caloriesBurned');
-              await AsyncStorage.removeItem('distance');
-              await AsyncStorage.removeItem('coins');
-              await AsyncStorage.removeItem('weeklyStats');
-              await AsyncStorage.removeItem('lastSavedDate');
-              await AsyncStorage.removeItem('lastCoinStepCount');
-              await AsyncStorage.removeItem('recentStepRate');
-              
-              // User profile data
-              await AsyncStorage.removeItem('userName');
-              await AsyncStorage.removeItem('stepGoal');
-              await AsyncStorage.removeItem('weight');
-              
-              // App state data
-              await AsyncStorage.removeItem('appBackgroundTime');
-              await AsyncStorage.removeItem('backgroundStepCount');
-              await AsyncStorage.removeItem('notificationSettings');
-              await AsyncStorage.removeItem('appSettings');
-              
-              // Background task persistence
-              await AsyncStorage.removeItem('backgroundTaskRegistered');
-              
-              // Finally use clear() to delete everything else that might have been missed
+              // Brisanje svih podataka iz AsyncStorage-a
               await AsyncStorage.clear();
               
-              // Reset context state
+              // Resetiranje stanja konteksta na početne vrijednosti
               setStepCount(0);
               setCoins(0);
               setCaloriesBurned(0);
               setDistance(0);
               
-              console.log('All data successfully cleared before logout');
+              // Navigacija na zaslon za prijavu
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],
               });
             } catch (error) {
-              console.error('Error during logout data clearing:', error);
-              Alert.alert('Error', 'Failed to completely log out. Please try again.');
+              console.error('Greška tijekom brisanja podataka:', error);
+              Alert.alert('Error', 'Logout failed. Please try again.');
             }
           }
         }
@@ -193,40 +183,20 @@ export default function ProfileScreen() {
     );
   };
 
-  const resetSteps = async () => {
-    Alert.alert(
-      "Reset Progress",
-      "Are you sure you want to reset your steps and coins? This cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        { 
-          text: "Reset", 
-          onPress: async () => {
-            setStepCount(4990);
-            setCoins(0);
-            
-            
-            // Also reset flower growth tracking
-            await AsyncStorage.removeItem('lastTrackedStepCount');
-            
-            Alert.alert("Reset Complete", "Your steps and coins have been reset to 0.");
-          },
-          style: "destructive"
-        }
-      ]
-    );
-  };
-
+  // --- POMOĆNE FUNKCIJE ---
+  
+  /**
+   * Formatiranje brojeva za prikaz (dodavanje separatora tisućica)
+   */
   const formatNumber = (number) => {
     return new Intl.NumberFormat().format(number);
   };
 
+  // --- PRIKAZ ZASLONA ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Zaglavlje s podacima korisnika */}
         <View style={styles.header}>
           <View style={styles.profileCard}>
             <View style={styles.avatar}>
@@ -241,7 +211,9 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Glavni sadržaj s opcijama i statistikom */}
         <View style={styles.mainContent}>
+          {/* Kartica opcija */}
           <View style={styles.optionsCard}>
             <Text style={styles.optionsTitle}>Options</Text>
             <View style={styles.optionsGrid}>
@@ -255,14 +227,7 @@ export default function ProfileScreen() {
                 style={styles.option}
                 onPress={() => navigation.navigate('Stats')}
               >
-                <Text style={styles.optionText}>View Stats</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.option}
-                onPress={resetSteps}
-              >
-                <Text style={styles.optionText}>Restart Stats</Text>
+                <Text style={styles.optionText}>View Statistics</Text>
               </TouchableOpacity>
             </View>
             
@@ -270,10 +235,11 @@ export default function ProfileScreen() {
               style={[styles.option, styles.logoutOption]}
               onPress={clearDataAndLogout}
             >
-              <Text style={[styles.optionText, styles.logoutText]}>Logout</Text>
+              <Text style={[styles.optionText, styles.logoutText]}>Log Out</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Kartica sažetka aktivnosti */}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Activity Summary</Text>
             <View style={styles.summaryRow}>
@@ -287,14 +253,14 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{Math.round(caloriesBurned)}</Text>
-                <Text style={styles.summaryLabel}>cal</Text>
+                <Text style={styles.summaryLabel}>kcal</Text>
               </View>
             </View>
           </View>
         </View>
       </View>
       
-      {/* Edit Profile Modal */}
+      {/* Modalni prozor za uređivanje profila */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -367,6 +333,7 @@ export default function ProfileScreen() {
   );
 }
 
+// --- STILOVI ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

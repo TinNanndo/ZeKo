@@ -1,8 +1,14 @@
 import { registerRootComponent } from 'expo';
-
 import App from './App';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
+/**
+ * ULAZNA TOČKA APLIKACIJE
+ * 
+ * Ova datoteka služi kao početna točka za pokretanje React Native aplikacije.
+ * Koristi Expo funkciju registerRootComponent koja:
+ * 1. Registrira glavni komponentu aplikacije (App)
+ * 2. Postavlja odgovarajuće okruženje ovisno o načinu pokretanja:
+ *    - Unutar Expo razvojnog okruženja
+ *    - Kao samostalna nativna aplikacija
+ */
 registerRootComponent(App);

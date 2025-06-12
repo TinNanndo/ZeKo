@@ -3,230 +3,291 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
+import { FLOWER_TYPES } from '../context/flowerData';
 
-// Icons
+// Ikone
 import SvgCoins from '../assets/icons/coins.svg';
 import SvgBack from '../assets/icons/back.svg';
 
-import { FLOWER_TYPES, getFlowersByRarity } from '../context/flowerData';
-
+/**
+ * ShopScreen - Zaslon za trgovinu cvijećem
+ * 
+ * Omogućuje korisniku kupovinu cvijeća za novčiće zarađene hodanjem.
+ * Sadrži funkcionalnosti za:
+ * 1. Filtriranje cvijeća prema rijetkosti
+ * 2. Kupovinu cvijeća i oduzimanje novčića
+ * 3. Postavljanje kupljenog cvijeta kao aktivnog
+ * 4. Praćenje kolekcije kupljenih cvjetova
+ */
 export default function ShopScreen({ navigation }) {
+  // --- STANJE APLIKACIJE ---
   const { coins, setCoins, updateLastTrackedStepCount } = useStats();
-  const [shopItems, setShopItems] = useState([]);
-  const [purchasedItems, setPurchasedItems] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [shopItems, setShopItems] = useState([]);             // Popis artikala u trgovini
+  const [purchasedItems, setPurchasedItems] = useState([]); // Kupljeni artikli
+  const [selectedFilter, setSelectedFilter] = useState('all'); // Aktivni filter za prikaz artikala
 
+  // --- UČITAVANJE PODATAKA ---
+  
+  /**
+   * Učitavanje podataka trgovine prilikom prvog renderiranja
+   */
   useEffect(() => {
     loadShopData();
   }, []);
 
+  /**
+   * Funkcija za učitavanje podataka trgovine i kupljenih artikala
+   * Dohvaća kupljene artikle iz AsyncStorage-a i stvara popis 
+   * dostupnih cvjetova za kupovinu
+   */
   const loadShopData = async () => {
     try {
-      // Load purchased items
+      // Učitavanje kupljenih artikala
       const storedPurchases = await AsyncStorage.getItem('shopPurchases');
       if (storedPurchases) {
         setPurchasedItems(JSON.parse(storedPurchases));
       }
       
-      // Set up shop items based on flower data
+      // Stvaranje artikala za trgovinu iz podataka o cvijeću
       const items = FLOWER_TYPES.map(flower => ({
         id: flower.id,
         name: flower.name,
         image: flower.image,
         price: getPriceByRarity(flower.rarity),
         rarity: flower.rarity,
-        description: flower.description || 'A beautiful flower'
+        description: flower.description
       }));
       
       setShopItems(items);
     } catch (error) {
-      console.error('Error loading shop data:', error);
+      console.error('Greška pri učitavanju podataka trgovine:', error);
     }
   };
 
+  // --- POMOĆNE FUNKCIJE ---
+
+  /**
+   * Određuje cijenu cvijeta na temelju njegove rijetkosti
+   * @param {string} rarity - Rijetkost cvijeta
+   * @returns {number} - Cijena cvijeta u novčićima
+   */
   const getPriceByRarity = (rarity) => {
     switch(rarity) {
-      case 'common':
-        return 50;
-      case 'uncommon':
-        return 1000;
-      case 'rare':
-        return 2500;
-      case 'legendary':
-        return 5000;
-      default:
-        return 500;
+      case 'common': return 50;     // Obično
+      case 'uncommon': return 1000; // Neuobičajeno
+      case 'rare': return 2500;     // Rijetko
+      case 'legendary': return 5000; // Legendarno
+      default: return 500;
     }
   };
 
-const handlePurchase = async (item) => {
-  if (coins < item.price) {
-    Alert.alert('Not enough coins', 'Walk more to earn coins!');
-    return;
-  }
-
-  // Update coins
-  setCoins(coins - item.price);
-  await AsyncStorage.setItem('coins', (coins - item.price).toString());
-
-  // Create a unique ID for this purchase instance
-  const purchaseId = `${item.id}_${Date.now()}`;
-  
-  // Add to purchased items with unique ID
-  const newPurchases = [...purchasedItems, { 
-    id: item.id,
-    purchaseId: purchaseId,
-    purchasedAt: new Date().toISOString() 
-  }];
-  setPurchasedItems(newPurchases);
-  await AsyncStorage.setItem('shopPurchases', JSON.stringify(newPurchases));
-
-  // Check if this is the first purchased flower
-  const isFirstPurchase = purchasedItems.length === 0;
-
-  // If first purchase, set as active flower
-  if (isFirstPurchase) {
-    const purchasedFlower = FLOWER_TYPES.find(f => f.id === item.id);
-    if (purchasedFlower) {
-      // Create instance ID
-      const flowerWithInstance = {
-        ...purchasedFlower,
-        instanceId: `${item.id}_instance0`,
-        instanceNumber: 1
-      };
-      
-      // Initialize the progress map for this flower
-const flowerProgressMap = await AsyncStorage.getItem('flowerProgressMap');
-const progressMap = flowerProgressMap ? JSON.parse(flowerProgressMap) : {};
-
-// Ensure the progress is set to 0 for this flower instance
-progressMap[flowerWithInstance.instanceId] = 0;
-      
-await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(progressMap));
-await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
-      await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
-await updateLastTrackedStepCount();
-      Alert.alert(
-        'First Flower Purchased!', 
-        `You have purchased ${item.name}. It is now set as your active flower. Return to the garden to see it grow!`,
-        [
-          { 
-            text: 'OK', 
-            onPress: () => navigation.navigate('Garden', { 
-              newFlower: true,
-              flowerId: item.id,
-              purchaseId: purchaseId
-            })
-          }
-        ]
-      );
-    } else {
-      Alert.alert('Purchase Successful', `You have purchased ${item.name}.`);
-    }
-  } else {
-    // For repeat purchases, still ask about making active
-    Alert.alert(
-      'Purchase Successful', 
-      `You have purchased ${item.name}. Would you like to make it your active flower?`,
-      [
-        { 
-          text: 'Yes', 
-          onPress: async () => {
-            const purchasedFlower = FLOWER_TYPES.find(f => f.id === item.id);
-            if (purchasedFlower) {
-              // Create instance ID for the new flower
-              const instanceIdx = purchasedItems.filter(p => p.id === item.id).length - 1;
-              const flowerWithInstance = {
-                ...purchasedFlower,
-                instanceId: `${item.id}_instance${instanceIdx}`,
-                instanceNumber: instanceIdx + 1
-              };
-              
-              await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
-              await AsyncStorage.setItem('growthProgress', '0'); // Reset progress
-              await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());              
-              navigation.navigate('Garden', { 
-                newFlower: true,
-                flowerId: item.id,
-                purchaseId: purchaseId,
-                makeActive: true
-              });
-            }
-          } 
-        },
-        { 
-          text: 'No', 
-          style: 'cancel',
-          onPress: () => navigation.navigate('Garden', { 
-            newFlower: true,
-            flowerId: item.id,
-            purchaseId: purchaseId,
-            makeActive: false
-          })
-        }
-      ]
-    );
-  }
-};
-
+  /**
+   * Filtrira artikle na temelju odabranog filtera
+   * @returns {Array} - Filtrirana lista artikala
+   */
   const getFilteredItems = () => {
     if (selectedFilter === 'all') return shopItems;
     return shopItems.filter(item => item.rarity === selectedFilter);
   };
 
-const isPurchased = (itemId) => {
-  return false;
-};
-
-const renderShopItem = ({ item }) => (
-  <View style={styles.shopItem}>
-    <View style={[styles.rarityIndicator, { backgroundColor: getRarityColor(item.rarity) }]} />
-    <Image source={item.image} style={styles.itemImage} />
-    <Text style={styles.itemName}>{item.name}</Text>
-    <Text style={styles.itemRarity}>{item.rarity}</Text>
-    <Text style={styles.itemDescription}>{item.description}</Text>
-    <View style={styles.priceContainer}>
-      <Text style={styles.priceText}>{item.price}</Text>
-      <SvgCoins width={16} height={16} />
-    </View>
-    
-    {/* Update owned badge to show count instead */}
-    {purchasedItems.filter(purchase => purchase.id === item.id).length > 0 && (
-      <View style={styles.ownedBadge}>
-        <Text style={styles.ownedText}>
-          Owned: {purchasedItems.filter(purchase => purchase.id === item.id).length}
-        </Text>
-      </View>
-    )}
-    
-    <TouchableOpacity
-      style={[
-        styles.purchaseButton,
-        coins < item.price ? styles.disabledButton : null
-      ]}
-      onPress={() => handlePurchase(item)}
-      disabled={coins < item.price}
-    >
-      <Text style={styles.purchaseText}>
-        Purchase
-      </Text>
-    </TouchableOpacity>
-  </View>
-);
-
+  /**
+   * Vraća boju koja odgovara rijetkosti cvijeta za vizualni indikator
+   * @param {string} rarity - Rijetkost cvijeta
+   * @returns {string} - Hex kod boje
+   */
   const getRarityColor = (rarity) => {
     switch(rarity) {
-      case 'common': return '#8BC34A';
-      case 'uncommon': return '#2196F3';
-      case 'rare': return '#9C27B0';
-      case 'legendary': return '#FFD700';
+      case 'common': return '#8BC34A';    // Zelena za obično
+      case 'uncommon': return '#2196F3';  // Plava za neuobičajeno
+      case 'rare': return '#9C27B0';      // Ljubičasta za rijetko
+      case 'legendary': return '#FFD700'; // Zlatna za legendarno
       default: return '#8BC34A';
     }
   };
 
+  /**
+   * Pretvara engleski naziv rijetkosti u odgovarajući engleski naziv za prikaz
+   * @param {string} rarity - Rijetkost na engleskom
+   * @returns {string} - Rijetkost za prikaz
+   */
+  const translateRarity = (rarity) => {
+    switch(rarity) {
+      case 'common': return 'Common';
+      case 'uncommon': return 'Uncommon';
+      case 'rare': return 'Rare';
+      case 'legendary': return 'Legendary';
+      default: return rarity;
+    }
+  };
+
+  // --- PROCESIRANJE KUPOVINE ---
+
+  /**
+   * Obrađuje kupovinu cvijeta
+   * Oduzima novčiće, dodaje cvijet u kolekciju i postavlja ga kao aktivan ako je potrebno
+   * @param {Object} item - Artikl koji se kupuje
+   */
+  const handlePurchase = async (item) => {
+    // Provjera ima li korisnik dovoljno novčića
+    if (coins < item.price) {
+      Alert.alert('Not Enough Coins', 'Walk more to earn coins!');
+      return;
+    }
+
+    // Ažuriranje stanja novčića
+    setCoins(coins - item.price);
+    await AsyncStorage.setItem('coins', (coins - item.price).toString());
+
+    // Stvaranje jedinstvenog ID-a za ovu kupnju
+    const purchaseId = `${item.id}_${Date.now()}`;
+    
+    // Dodavanje u kupljene artikle
+    const newPurchases = [...purchasedItems, { 
+      id: item.id,
+      purchaseId: purchaseId,
+      purchasedAt: new Date().toISOString() 
+    }];
+    setPurchasedItems(newPurchases);
+    await AsyncStorage.setItem('shopPurchases', JSON.stringify(newPurchases));
+
+    // Provjera je li ovo prva kupnja cvijeta
+    const isFirstPurchase = purchasedItems.length === 0;
+
+    // Ako je prva kupnja, automatski postavlja cvijet kao aktivan
+    if (isFirstPurchase) {
+      const purchasedFlower = FLOWER_TYPES.find(f => f.id === item.id);
+      if (purchasedFlower) {
+        // Stvaranje instance cvijeta
+        const flowerWithInstance = {
+          ...purchasedFlower,
+          instanceId: `${item.id}_instance0`,
+          instanceNumber: 1
+        };
+        
+        // Inicijalizacija mape napretka za ovaj cvijet
+        const flowerProgressMap = await AsyncStorage.getItem('flowerProgressMap');
+        const progressMap = flowerProgressMap ? JSON.parse(flowerProgressMap) : {};
+        progressMap[flowerWithInstance.instanceId] = 0;
+        
+        // Spremanje podataka o cvijetu
+        await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(progressMap));
+        await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
+        await AsyncStorage.setItem('growthProgress', '0');
+        await updateLastTrackedStepCount();
+        
+        // Obavijest o kupnji i navigacija na vrt
+        Alert.alert(
+          'First Flower Purchased!', 
+          `You bought ${item.name}. It has been set as your active flower. Return to the garden to watch it grow!`,
+          [
+            { 
+              text: 'OK', 
+              onPress: () => navigation.navigate('Garden', { 
+                newFlower: true,
+                flowerId: item.id,
+                purchaseId: purchaseId
+              })
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Purchase Successful', `You bought ${item.name}.`);
+      }
+    } else {
+      // Za kasnije kupnje, pita korisnika želi li postaviti cvijet kao aktivan
+      Alert.alert(
+        'Purchase Successful', 
+        `You bought ${item.name}. Would you like to set it as your active flower?`,
+        [
+          { 
+            text: 'Yes', 
+            onPress: async () => {
+              const purchasedFlower = FLOWER_TYPES.find(f => f.id === item.id);
+              if (purchasedFlower) {
+                // Stvaranje instance za novi cvijet
+                const instanceIdx = purchasedItems.filter(p => p.id === item.id).length - 1;
+                const flowerWithInstance = {
+                  ...purchasedFlower,
+                  instanceId: `${item.id}_instance${instanceIdx}`,
+                  instanceNumber: instanceIdx + 1
+                };
+                
+                // Postavljanje kao aktivnog cvijeta i resetiranje napretka
+                await AsyncStorage.setItem('activeFlower', JSON.stringify(flowerWithInstance));
+                await AsyncStorage.setItem('growthProgress', '0');
+                await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+                
+                // Navigacija na vrt
+                navigation.navigate('Garden', { 
+                  newFlower: true,
+                  flowerId: item.id,
+                  purchaseId: purchaseId,
+                  makeActive: true
+                });
+              }
+            } 
+          },
+          { 
+            text: 'No', 
+            style: 'cancel',
+            onPress: () => navigation.navigate('Garden', { 
+              newFlower: true,
+              flowerId: item.id,
+              purchaseId: purchaseId,
+              makeActive: false
+            })
+          }
+        ]
+      );
+    }
+  };
+
+  // --- KOMPONENTE ZA RENDERIRANJE ---
+
+  /**
+   * Renderira pojedinačni artikl u trgovini
+   */
+  const renderShopItem = ({ item }) => (
+    <View style={styles.shopItem}>
+      <View style={[styles.rarityIndicator, { backgroundColor: getRarityColor(item.rarity) }]} />
+      <Image source={item.image} style={styles.itemImage} />
+      <Text style={styles.itemName}>{item.name}</Text>
+      <Text style={styles.itemRarity}>{translateRarity(item.rarity)}</Text>
+      <Text style={styles.itemDescription}>{item.description}</Text>
+      <View style={styles.priceContainer}>
+        <Text style={styles.priceText}>{item.price}</Text>
+        <SvgCoins width={16} height={16} />
+      </View>
+      
+      {/* Oznaka za vlasništvo s brojem */}
+      {purchasedItems.filter(purchase => purchase.id === item.id).length > 0 && (
+        <View style={styles.ownedBadge}>
+          <Text style={styles.ownedText}>
+            Owned: {purchasedItems.filter(purchase => purchase.id === item.id).length}
+          </Text>
+        </View>
+      )}
+      
+      <TouchableOpacity
+        style={[
+          styles.purchaseButton,
+          coins < item.price ? styles.disabledButton : null
+        ]}
+        onPress={() => handlePurchase(item)}
+        disabled={coins < item.price}
+      >
+        <Text style={styles.purchaseText}>
+          Buy
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // --- PRIKAZ ZASLONA ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Zaglavlje s gumbom za povratak, naslovom i stanjem novčića */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <SvgBack width={24} height={24} />
@@ -238,6 +299,7 @@ const renderShopItem = ({ item }) => (
           </View>
         </View>
 
+        {/* Filteri za prikaz različitih tipova cvijeća */}
         <View style={styles.filterContainer}>
           <TouchableOpacity
             style={[styles.filterButton, selectedFilter === 'all' && styles.activeFilter]}
@@ -271,6 +333,7 @@ const renderShopItem = ({ item }) => (
           </TouchableOpacity>
         </View>
 
+        {/* Lista artikala u trgovini */}
         <FlatList
           data={getFilteredItems()}
           renderItem={renderShopItem}
@@ -283,6 +346,7 @@ const renderShopItem = ({ item }) => (
   );
 }
 
+// --- STILOVI ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -418,18 +482,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-ownedBadge: {
-  position: 'absolute',
-  top: 10,
-  right: 10,
-  backgroundColor: 'rgba(76, 175, 80, 0.7)',
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-  borderRadius: 12,
-},
-ownedText: {
-  color: 'white',
-  fontSize: 10,
-  fontWeight: 'bold',
-},
+  ownedBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(76, 175, 80, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ownedText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
 });

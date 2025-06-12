@@ -3,43 +3,63 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STEP_LENGTH } from './PedometerService';
 
+/**
+ * KONSTANTA ZADATKA
+ * Jedinstveni identifikator za pozadinski zadatak brojanja koraka
+ * Koristi se pri registraciji i pozivanju zadatka
+ */
 export const STEP_COUNTER_TASK = 'STEP_COUNTER_TASK';
 
-// Define the background task for step counting
+/**
+ * DEFINICIJA POZADINSKOG ZADATKA
+ * 
+ * Ovaj zadatak se izvršava periodički u pozadini aplikacije i osigurava:
+ * 1. Detekciju promjene dana i spremanje dnevne statistike
+ * 2. Procjenu broja koraka dok aplikacija nije aktivna
+ * 3. Ažuriranje svih metrika aktivnosti (koraci, kalorije, udaljenost)
+ * 
+ * Zadatak vraća jedan od sljedećih rezultata:
+ * - NewData: Uspješno izvršen s novim podacima
+ * - Failed: Došlo je do greške tijekom izvršavanja
+ */
 TaskManager.defineTask(STEP_COUNTER_TASK, async ({ data, error }) => {
+  // Provjera i obrada grešaka
   if (error) {
-    console.error(error);
+    console.error('Pozadinski zadatak završio s greškom:', error);
     return BackgroundFetch.Result.Failed;
   }
   
   try {
-    // Get current step count
-    const storedStepCount = await AsyncStorage.getItem('stepCount');
-    const currentStepCount = parseInt(storedStepCount || '0', 10);
+    // --- DOHVAĆANJE TRENUTNIH PODATAKA ---
     
-    // Get current distance and calories
+    // Dohvat osnovnih metrika aktivnosti
+    const storedStepCount = await AsyncStorage.getItem('stepCount');
     const storedDistance = await AsyncStorage.getItem('distance');
     const storedCalories = await AsyncStorage.getItem('caloriesBurned');
+    
+    // Konverzija u brojeve
+    const currentStepCount = parseInt(storedStepCount || '0', 10);
     const currentDistance = parseFloat(storedDistance || '0');
     const currentCalories = parseFloat(storedCalories || '0');
     
-    // Get user weight for calorie calculation
+    // Podaci potrebni za izračune
     const storedWeight = await AsyncStorage.getItem('weight');
-    const weight = parseFloat(storedWeight || '70');
+    const weight = parseFloat(storedWeight || '70'); // 70kg kao zadana vrijednost
     
-    // Get last background check time
+    // Vremensko praćenje
     const lastBackgroundCheck = await AsyncStorage.getItem('lastBackgroundCheck');
     const currentTime = new Date().getTime();
     
-    // Check for day change
-    const currentDate = new Date().toISOString().split('T')[0];
+    // --- PROVJERA PROMJENE DANA ---
+    
+    const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
     const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
     
-    // If day changed, save yesterday's stats and reset
+    // Ako je promijenjen dan, spremi statistiku i resetiraj podatke
     if (lastSavedDate && lastSavedDate !== currentDate) {
-      console.log(`Background task detected day change: ${lastSavedDate} -> ${currentDate}`);
+      console.log(`Pozadinski zadatak: Otkrivena promjena dana (${lastSavedDate} → ${currentDate})`);
       
-      // Create an entry for the previous day
+      // 1. Kreiranje zapisa statistike za prethodni dan
       const previousDayStats = {
         date: lastSavedDate,
         stepCount: currentStepCount,
@@ -48,32 +68,34 @@ TaskManager.defineTask(STEP_COUNTER_TASK, async ({ data, error }) => {
         coins: parseInt(await AsyncStorage.getItem('coins') || '0', 10)
       };
       
-      // Update weekly stats
+      // 2. Ažuriranje tjedne statistike
       const stats = await AsyncStorage.getItem('weeklyStats');
       const weeklyStats = stats ? JSON.parse(stats) : [];
+      
+      // Ukloni sve prethodne zapise za isti dan (izbjegavanje duplikata)
       const filteredStats = weeklyStats.filter(stat => stat.date !== lastSavedDate);
+      
+      // Dodaj novi zapis na početak i sačuvaj samo zadnjih 7 dana
       const updatedStats = [previousDayStats, ...filteredStats].slice(0, 7);
-      
-      // Save updated weekly stats
       await AsyncStorage.setItem('weeklyStats', JSON.stringify(updatedStats));
-      console.log(`Background task saved stats for previous day: ${lastSavedDate}`);
       
-      // Reset for new day
+      // 3. Resetiranje metrika za novi dan
       await AsyncStorage.setItem('stepCount', '0');
       await AsyncStorage.setItem('caloriesBurned', '0');
       await AsyncStorage.setItem('distance', '0');
       await AsyncStorage.setItem('lastSavedDate', currentDate);
       
-      // Set variables to zero for this execution
       return BackgroundFetch.Result.NewData;
     }
     
-    // If we have a previous check time, calculate elapsed time
+    // --- PROCJENA I AŽURIRANJE STATISTIKE U POZADINI ---
+    
     if (lastBackgroundCheck) {
+      // 1. Izračun proteklog vremena od zadnje provjere
       const elapsedMinutes = (currentTime - parseInt(lastBackgroundCheck)) / (1000 * 60);
       
-      // Get the user's recent walking patterns from storage
-      let recentStepsPerMinute = 10; // Default value
+      // 2. Procjena koraka na temelju prethodne aktivnosti korisnika
+      let recentStepsPerMinute = 10; // Zadana vrijednost ako nema podataka
       
       try {
         const recentActivity = await AsyncStorage.getItem('recentStepRate');
@@ -81,54 +103,63 @@ TaskManager.defineTask(STEP_COUNTER_TASK, async ({ data, error }) => {
           recentStepsPerMinute = parseFloat(recentActivity);
         }
       } catch (err) {
-        console.error('Error getting recent activity:', err);
+        console.error('Greška pri dohvaćanju stope koraka:', err);
       }
       
-      // Estimate steps based on elapsed time and recent activity
-      // Use a more conservative estimate in background (60% of normal rate)
+      // Konzervativnija procjena za pozadinu - 60% normalne stope
+      // Ovo pretpostavlja da korisnik nije aktivno koristio uređaj
       const estimatedSteps = Math.round(elapsedMinutes * recentStepsPerMinute * 0.6);
       
-      // Update step count with estimate
+      // 3. Ažuriranje broja koraka
       const newStepCount = currentStepCount + estimatedSteps;
       await AsyncStorage.setItem('stepCount', newStepCount.toString());
       
-      // Calculate and update distance
-      const addedDistance = (estimatedSteps * STEP_LENGTH) / 1000; // km
+      // 4. Ažuriranje prijeđene udaljenosti
+      const addedDistance = (estimatedSteps * STEP_LENGTH) / 1000; // u kilometrima
       const newDistance = currentDistance + addedDistance;
       await AsyncStorage.setItem('distance', newDistance.toString());
       
-      // Calculate and update calories
-      const caloriesPerKgPerStep = 0.0005;
+      // 5. Ažuriranje potrošenih kalorija
+      const caloriesPerKgPerStep = 0.0005; // Faktor potrošnje kalorija po kg težine po koraku
       const addedCalories = weight * caloriesPerKgPerStep * estimatedSteps;
       const newCalories = currentCalories + addedCalories;
       await AsyncStorage.setItem('caloriesBurned', newCalories.toString());
       
-      console.log(`Background task: added ${estimatedSteps} steps, ${addedDistance.toFixed(2)}km, ${addedCalories.toFixed(1)} cal`);
+      console.log(`Pozadinski zadatak: Dodano ${estimatedSteps} koraka, ${addedDistance.toFixed(2)} km, ${addedCalories.toFixed(1)} kcal`);
     }
     
-    // Update last background check time
+    // Spremi vrijeme ove provjere za sljedeći izračun
     await AsyncStorage.setItem('lastBackgroundCheck', currentTime.toString());
     
     return BackgroundFetch.Result.NewData;
   } catch (error) {
-    console.error('Error in background task:', error);
+    console.error('Neočekivana greška u pozadinskom zadatku:', error);
     return BackgroundFetch.Result.Failed;
   }
 });
 
+/**
+ * REGISTRACIJA POZADINSKOG ZADATKA
+ * 
+ * Postavlja zadatak za periodičko izvršavanje čak i kad aplikacija nije aktivna.
+ * Zadatak će se pokretati svakih 15 minuta i preživjet će gašenje aplikacije.
+ * 
+ * Ova funkcija se poziva pri pokretanju aplikacije kako bi se osiguralo
+ * kontinuirano praćenje aktivnosti u pozadini.
+ */
 export const registerBackgroundTask = async () => {
   try {
-    // Make sure the task is registered
+    // Registracija zadatka s postavkama
     await BackgroundFetch.registerTaskAsync(STEP_COUNTER_TASK, {
-      minimumInterval: 900, // 15 minutes (in seconds)
-      stopOnTerminate: false,
-      startOnBoot: true,
+      minimumInterval: 900,    // Svakih 15 minuta (u sekundama)
+      stopOnTerminate: false,  // Nastavlja s radom nakon zatvaranja aplikacije
+      startOnBoot: true,       // Pokreće se pri pokretanju uređaja
     });
     
-    // Schedule the background task
+    // Postavka minimalnog intervala za izvršavanje
     await BackgroundFetch.setMinimumIntervalAsync(900);
-    console.log('Background task registered successfully');
+    console.log('Pozadinski zadatak uspješno registriran');
   } catch (error) {
-    console.error('Failed to register background task:', error);
+    console.error('Neuspjela registracija pozadinskog zadatka:', error);
   }
 };

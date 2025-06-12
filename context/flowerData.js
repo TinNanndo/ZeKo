@@ -1,7 +1,14 @@
 import flowersData from './flowers.json';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Map JSON data to include actual image requires
+/**
+ * INICIJALIZACIJA PODATAKA O CVIJEĆU
+ */
+
+/**
+ * Lista svih tipova cvjetova s učitanim slikama
+ * Mapira JSON podatke i dodaje stvarne reference na slike
+ */
 export const FLOWER_TYPES = flowersData.flowers.map(flower => ({
   ...flower,
   image: getFlowerImage(flower.imagePath)
@@ -35,54 +42,93 @@ function getFlowerImage(path) {
     case '12.png':
       return require('../assets/flowers/12.png');
     default:
-      return require('../assets/flowers/1.png'); // Fallback to the first flower
+      return require('../assets/flowers/1.png'); // Rezervna opcija - prvi cvijet
   }
 }
 
-// Modify getLeastRepresentedFlower to handle no active flower
+/**
+ * FUNKCIJE ZA PRETRAGU I FILTRIRANJE CVJETOVA
+ */
+
+/**
+ * Dohvaća cvjetove filtrirane po rijetkosti
+ * @param {string} rarity - Rijetkost cvijeta ('common', 'uncommon', 'rare', 'legendary')
+ * @returns {Array} - Lista filtriranih cvjetova
+ */
+export function getFlowersByRarity(rarity) {
+  return FLOWER_TYPES.filter(flower => flower.rarity === rarity);
+}
+
+/**
+ * Dohvaća nasumičan cvijet iz kolekcije
+ * @returns {Object} - Nasumično odabrani cvijet
+ */
+export function getRandomFlower() {
+  const randomIndex = Math.floor(Math.random() * FLOWER_TYPES.length);
+  return FLOWER_TYPES[randomIndex];
+}
+
+/**
+ * Pronalazi cvijet prema ID-u
+ * @param {string} id - ID cvijeta koji se traži
+ * @returns {Object} - Pronađeni cvijet ili prvi cvijet kao zadana vrijednost
+ */
+export function getFlowerById(id) {
+  return FLOWER_TYPES.find(flower => flower.id === id) || FLOWER_TYPES[0];
+}
+
+/**
+ * FUNKCIJE ZA RAD S KORISNIKOVIM CVIJEĆEM
+ */
+
+/**
+ * Pronalazi cvijet koji je najmanje zastupljen u korisnikovoj kolekciji
+ * @param {Array} grownFlowers - Lista već uzgojenih cvjetova
+ * @returns {Object|null} - Najmanje zastupljen cvijet ili null
+ */
 export async function getLeastRepresentedFlower(grownFlowers = []) {
   try {
-    // Check if user has any purchased flowers
+    // Provjera ima li korisnik kupljeno cvijeće
     const purchases = await AsyncStorage.getItem('shopPurchases');
     let purchasedFlowerIds = [];
     
     if (purchases) {
-      // Extract the base IDs (without timestamps)
+      // Izdvajanje osnovnih ID-ova (bez vremenskih oznaka)
       purchasedFlowerIds = JSON.parse(purchases).map(item => item.id);
     }
     
-    // Get unique flower IDs (no duplicates)
+    // Dobivanje jedinstvenih ID-ova (bez duplikata)
     purchasedFlowerIds = [...new Set(purchasedFlowerIds)];
     
-    // If user has no purchased flowers, return null (no flower)
+    // Ako korisnik nema kupljenog cvijeća, vraćamo null
     if (purchasedFlowerIds.length === 0) {
       return null;
     }
     
-    // Otherwise get purchased flowers
+    // Dohvaćanje kupljenih cvjetova
     const purchasedFlowers = FLOWER_TYPES.filter(flower => 
       purchasedFlowerIds.includes(flower.id)
     );
     
-    // If no flowers have been grown yet, return the first purchased flower
+    // Ako još nije uzgojeno nijedno cvijeće, vraćamo prvi kupljeni
     if (grownFlowers.length === 0) {
       return purchasedFlowers[0];
     }
     
-    // Count occurrences of each flower type in the collection
+    // Brojanje pojavljivanja svakog tipa cvijeta u kolekciji
     const flowerCounts = {};
     purchasedFlowers.forEach(flower => {
-      flowerCounts[flower.id] = 0; // Initialize all purchased flowers with 0 count
+      flowerCounts[flower.id] = 0; // Inicijalizacija svih kupljenih cvjetova s 0
     });
     
     grownFlowers.forEach(flower => {
-      const baseId = flower.id.split('_')[0]; // Handle IDs with timestamps
+      const baseId = flower.id.split('_')[0]; // Obrada ID-ova s vremenskim oznakama
       if (flowerCounts[baseId] !== undefined) {
         flowerCounts[baseId] += 1;
       }
     });
     
-    // Find least represented flower type
+    // Pronalaženje najmanje zastupljenog tipa cvijeta
     let leastRepresentedFlower = purchasedFlowers[0];
     let minCount = Number.MAX_SAFE_INTEGER;
     
@@ -96,14 +142,19 @@ export async function getLeastRepresentedFlower(grownFlowers = []) {
     
     return leastRepresentedFlower;
   } catch (error) {
-    console.error('Error getting least represented flower:', error);
-    return null; // Return null if there's an error
+    console.error('Greška pri dohvaćanju najmanje zastupljenog cvijeta:', error);
+    return null;
   }
 }
 
+/**
+ * Provjerava posjeduje li korisnik određeni cvijet
+ * @param {string} flowerId - ID cvijeta koji se provjerava
+ * @returns {boolean} - true ako korisnik posjeduje cvijet
+ */
 export async function isFlowerOwned(flowerId) {
   try {
-    // Check purchased flowers
+    // Provjera među kupljenim cvjetovima
     const purchases = await AsyncStorage.getItem('shopPurchases');
     if (purchases) {
       const purchasedItems = JSON.parse(purchases);
@@ -112,7 +163,7 @@ export async function isFlowerOwned(flowerId) {
       }
     }
     
-    // Check grown flowers
+    // Provjera među uzgojenim cvjetovima
     const grownFlowers = await AsyncStorage.getItem('grownFlowers');
     if (grownFlowers) {
       const grownItems = JSON.parse(grownFlowers);
@@ -123,11 +174,16 @@ export async function isFlowerOwned(flowerId) {
     
     return false;
   } catch (error) {
-    console.error('Error checking if flower is owned:', error);
+    console.error('Greška pri provjeri vlasništva cvijeta:', error);
     return false;
   }
 }
 
+/**
+ * Dohvaća sve cvjetove dostupne korisniku
+ * Uključuje običnu (common) sortu cvjetova i sve kupljene cvjetove
+ * @returns {Array} - Lista dostupnih cvjetova
+ */
 export async function getAvailableFlowers() {
   try {
     const purchases = await AsyncStorage.getItem('shopPurchases');
@@ -137,28 +193,12 @@ export async function getAvailableFlowers() {
       purchasedIds = JSON.parse(purchases).map(item => item.id);
     }
     
-    // Get all flowers that are either common or have been purchased
+    // Dohvat svih cvjetova koji su ili obični ili kupljeni
     return FLOWER_TYPES.filter(flower => 
       flower.rarity === 'common' || purchasedIds.includes(flower.id)
     );
   } catch (error) {
-    console.error('Error getting available flowers:', error);
+    console.error('Greška pri dohvaćanju dostupnih cvjetova:', error);
     return FLOWER_TYPES.filter(flower => flower.rarity === 'common');
   }
-}
-
-// Get flowers by rarity
-export function getFlowersByRarity(rarity) {
-  return FLOWER_TYPES.filter(flower => flower.rarity === rarity);
-}
-
-// Get a random flower
-export function getRandomFlower() {
-  const randomIndex = Math.floor(Math.random() * FLOWER_TYPES.length);
-  return FLOWER_TYPES[randomIndex];
-}
-
-// Get a flower by ID
-export function getFlowerById(id) {
-  return FLOWER_TYPES.find(flower => flower.id === id) || FLOWER_TYPES[0];
 }

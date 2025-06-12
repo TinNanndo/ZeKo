@@ -6,27 +6,40 @@ import { useNavigation } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import SvgAvatar from '../assets/icons/avatar.svg';
 
+/**
+ * LoginScreen - Zaslon za inicijalno postavljanje korisničkog profila
+ * 
+ * Omogućuje korisniku da unese osnovne podatke potrebne za aplikaciju:
+ * 1. Korisničko ime (za personalizirane poruke)
+ * 2. Dnevni cilj koraka (za praćenje napretka)
+ * 3. Tjelesnu težinu (za izračun potrošenih kalorija)
+ */
 export default function LoginScreen() {
-  const [name, setName] = useState('');
-  const [stepGoal, setStepGoal] = useState('10000');
-  const [weight, setWeight] = useState('');
-  const [isModalVisible, setModalVisible] = useState(false);
-  const navigation = useNavigation();
-  const [isLoading, setIsLoading] = useState(true);
-
-  // In the useEffect where you check login status, remove this block:
+  // --- STANJE ZASLONA ---
+  const [name, setName] = useState('');                     // Korisničko ime
+  const [stepGoal, setStepGoal] = useState('10000');        // Cilj koraka (zadano 10000)
+  const [weight, setWeight] = useState('');                 // Težina korisnika
+  const [isModalVisible, setModalVisible] = useState(false); // Stanje modala za upozorenja
+  const [isLoading, setIsLoading] = useState(true);         // Stanje učitavanja
   
+  const navigation = useNavigation();
+
+  /**
+   * INICIJALIZACIJA ZASLONA
+   * 
+   * Postavlja datum zadnjeg spremanja podataka ako ne postoji
+   * kako bi osigurao pravilno praćenje statistike po danima
+   */
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        const storedName = await AsyncStorage.getItem('userName');
-        // Make sure lastSavedDate is set on first login to avoid day transition issues
+        // Postavljanje datuma zadnjeg spremanja ako ne postoji
         const lastSavedDate = await AsyncStorage.getItem('lastSavedDate');
         if (!lastSavedDate) {
           await AsyncStorage.setItem('lastSavedDate', new Date().toISOString().split('T')[0]);
         }
       } catch (error) {
-        console.error('Error checking login status:', error);
+        console.error('Greška pri inicijalizaciji datuma:', error);
       } finally {
         setIsLoading(false);
       }
@@ -35,46 +48,54 @@ export default function LoginScreen() {
     checkLoginStatus();
   }, []);
   
+  /**
+   * OBRADA PRIJAVE KORISNIKA
+   * 
+   * Validira unose, sprema korisničke podatke i inicijalizira
+   * statistiku. Nakon uspješne obrade preusmjerava na Home zaslon.
+   */
   const handleLogin = async () => {
+    // Validacija - sva polja moraju biti popunjena
     if (!name || !stepGoal || !weight) {
       setModalVisible(true);
-    } else {
-      try {
-        const currentDate = new Date().toISOString().split('T')[0];
-        
-        // Clear any previous data first (in case of reinstalling app or clearing app data)
-        await AsyncStorage.clear();
-        
-        // Save user info
-        await AsyncStorage.setItem('userName', name);
-        await AsyncStorage.setItem('stepGoal', stepGoal);
-        await AsyncStorage.setItem('weight', weight);
-        
-        // Initialize stats storage with zeros
-        await AsyncStorage.setItem('stepCount', '0');
-        await AsyncStorage.setItem('caloriesBurned', '0');
-        await AsyncStorage.setItem('distance', '0');
-        await AsyncStorage.setItem('coins', '0');
-        await AsyncStorage.setItem('lastSavedDate', currentDate);
-        await AsyncStorage.setItem('weeklyStats', JSON.stringify([]));
-        
-        // Explicitly ensure no flower data exists for new users
-        await AsyncStorage.removeItem('activeFlower');
-        await AsyncStorage.removeItem('flowerProgressMap');
-        await AsyncStorage.removeItem('shopPurchases');
-        await AsyncStorage.removeItem('grownFlowers');
-        await AsyncStorage.removeItem('lastTrackedStepCount');
-        
-        // Navigate to home screen
-        navigation.replace('Home');
-      } catch (error) {
-        console.error('Error saving data:', error);
-      }
+      return;
+    }
+    
+    try {
+      const currentDate = new Date().toISOString().split('T')[0];
+      
+      // Čisti sve prethodne podatke (bitno kod ponovnog korištenja)
+      await AsyncStorage.clear();
+      
+      // Spremanje korisničkih podataka
+      await AsyncStorage.setItem('userName', name);
+      await AsyncStorage.setItem('stepGoal', stepGoal);
+      await AsyncStorage.setItem('weight', weight);
+      
+      // Inicijalizacija statistike s početnim vrijednostima
+      await AsyncStorage.setItem('stepCount', '0');
+      await AsyncStorage.setItem('caloriesBurned', '0');
+      await AsyncStorage.setItem('distance', '0');
+      await AsyncStorage.setItem('coins', '0');
+      await AsyncStorage.setItem('lastSavedDate', currentDate);
+      await AsyncStorage.setItem('weeklyStats', JSON.stringify([]));
+      
+      // Čišćenje podataka o cvijeću za svježi početak
+      await AsyncStorage.removeItem('activeFlower');
+      await AsyncStorage.removeItem('flowerProgressMap');
+      await AsyncStorage.removeItem('shopPurchases');
+      await AsyncStorage.removeItem('grownFlowers');
+      await AsyncStorage.removeItem('lastTrackedStepCount');
+      
+      // Navigacija na glavni zaslon
+      navigation.replace('Home');
+    } catch (error) {
+      console.error('Greška pri spremanju korisničkih podataka:', error);
     }
   };
 
+  // Prikaz indikatora učitavanja
   if (isLoading) {
-    // You can show a loading indicator here if you want
     return (
       <View style={styles.container}>
         <Text style={{ color: 'white' }}>Loading...</Text>
@@ -82,78 +103,85 @@ export default function LoginScreen() {
     );
   }
 
+  // --- PRIKAZ ZASLONA ---
   return (
     <SafeAreaView style={styles.safeArea}>
-    <View style={styles.container}>
-      {/* ... (rest of your login screen UI code) ... */}
-      <View style={styles.avatarContainer}>
-        <View style={styles.avatarBackground}>
-          <SvgAvatar width="90" height="90" />
-        </View>
-      </View>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        placeholderTextColor="rgba(255, 255, 255, 0.5)"
-        value={name}
-        onChangeText={setName}
-      />
-
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={stepGoal}
-          dropdownIconColor="#2E4834"
-          style={styles.picker}
-          onValueChange={(itemValue) => setStepGoal(itemValue)}
-        >
-          <Picker.Item label="500 steps" value="500" />
-          <Picker.Item label="1,000 steps" value="1000" />
-          <Picker.Item label="2,500 steps" value="2500" />
-          <Picker.Item label="5,000 steps" value="5000" />
-          <Picker.Item label="7,500 steps" value="7500" />
-          <Picker.Item label="10,000 steps" value="10000" />
-          <Picker.Item label="12,500 steps" value="12500" />
-          <Picker.Item label="15,000 steps" value="15000" />
-          <Picker.Item label="20,000 steps" value="20000" />
-        </Picker>
-      </View>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Enter your weight"
-        placeholderTextColor="rgba(255, 255, 255, 0.5)"
-        value={weight}
-        onChangeText={setWeight}
-        keyboardType="numeric"
-      />
-
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Submit</Text>
-      </TouchableOpacity>
-
-      <Modal
-        visible={isModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalText}>Please fill in all fields</Text>
-            <TouchableOpacity style={styles.button} onPress={() => setModalVisible(false)}>
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
+      <View style={styles.container}>
+        {/* Avatar korisnika */}
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatarBackground}>
+            <SvgAvatar width="90" height="90" />
           </View>
         </View>
-      </Modal>
-    </View>
+
+        {/* Polje za unos korisničkog imena */}
+        <TextInput
+          style={styles.input}
+          placeholder="Username"
+          placeholderTextColor="rgba(255, 255, 255, 0.5)"
+          value={name}
+          onChangeText={setName}
+        />
+
+        {/* Izbornik za odabir dnevnog cilja koraka */}
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={stepGoal}
+            dropdownIconColor="#2E4834"
+            style={styles.picker}
+            onValueChange={(itemValue) => setStepGoal(itemValue)}
+          >
+            <Picker.Item label="500 steps" value="500" />
+            <Picker.Item label="1,000 steps" value="1000" />
+            <Picker.Item label="2,500 steps" value="2500" />
+            <Picker.Item label="5,000 steps" value="5000" />
+            <Picker.Item label="7,500 steps" value="7500" />
+            <Picker.Item label="10,000 steps" value="10000" />
+            <Picker.Item label="12,500 steps" value="12500" />
+            <Picker.Item label="15,000 steps" value="15000" />
+            <Picker.Item label="20,000 steps" value="20000" />
+          </Picker>
+        </View>
+
+        {/* Polje za unos težine */}
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your weight (kg)"
+          placeholderTextColor="rgba(255, 255, 255, 0.5)"
+          value={weight}
+          onChangeText={setWeight}
+          keyboardType="numeric"
+        />
+
+        {/* Gumb za potvrdu */}
+        <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Confirm</Text>
+        </TouchableOpacity>
+
+        {/* Modal upozorenja za nepotpune podatke */}
+        <Modal
+          visible={isModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalText}>Please fill in all fields</Text>
+              <TouchableOpacity style={styles.button} onPress={() => setModalVisible(false)}>
+                <Text style={styles.buttonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </View>
     </SafeAreaView>
   );
 }
 
+// --- STILOVI ---
 const styles = StyleSheet.create({
-    safeArea: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#2E4834',
   },

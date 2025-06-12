@@ -3,13 +3,14 @@
     "name": "zeko-fix",
     "slug": "zeko-fix",
     "version": "1.0.0",
+    "owner": "tinnanndo",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "0ec072cd-23a9-4f55-bdc5-8723b79b9bc4"
-      }
     },
     "android": {
       "package": "com.tinnanndo.zekofix",
@@ -23,12 +24,6 @@
         "backgroundColor": "#ffffff"
       }
     },
-    "owner": "tinnanndo",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "plugins": [
       [
         "expo-build-properties",
@@ -38,6 +33,11 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0ec072cd-23a9-4f55-bdc5-8723b79b9bc4"
+      }
+    }
   }
 }

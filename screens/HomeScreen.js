@@ -3,32 +3,45 @@ import { Text, View, AppState, StyleSheet, Image, Dimensions, TouchableOpacity }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStats } from '../context/StatsContext';
-import { FLOWER_TYPES } from '../context/flowerData';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
-// Custom modules
+// Vlastiti moduli
 import PedometerService, { STEP_LENGTH } from '../utils/PedometerService';
 import { registerBackgroundTask } from '../utils/BackgroundTasks';
+import CircularProgress from '../utils/CircularProgress';
 
-// Icons
+// SVG ikone
 import SvgCoins from '../assets/icons/coins.svg';
-import SvgNotif from '../assets/icons/notif.svg';
 import SvgSteps from '../assets/icons/steps.svg';
 import SvgCal from '../assets/icons/cal.svg';
 import SvgDist from '../assets/icons/dist.svg';
 import SvgShop from '../assets/icons/shop.svg';
-import CircularProgress from '../utils/CircularProgress';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-
+/**
+ * HomeScreen - Glavni zaslon aplikacije
+ * 
+ * Prikazuje statistiku korisnikove aktivnosti i trenutno stanje 
+ * uzgoja aktivnog cvijeta. Glavni funkcionalnosti:
+ * 1. Praćenje koraka, kalorija i udaljenosti
+ * 2. Prikaz napretka prema dnevnom cilju koraka
+ * 3. Prikaz aktivnog cvijeta i njegovog rasta
+ */
 function HomeScreen() {
   const navigation = useNavigation();
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  
+  // --- STANJE APLIKACIJE ---
+  
+  // Korisnički podaci
   const [userName, setUserName] = useState('');
   const [weight, setWeight] = useState(70);
   const [appState, setAppState] = useState(AppState.currentState);
+  const prevStepCount = React.useRef(0);
+  const [dimensions, setDimensions] = useState({screen: Dimensions.get('window')});
+  
+  // Podaci iz konteksta statistike
   const { 
     stepCount, 
-    setStepCount, 
     updateStepCount,
     caloriesBurned, 
     setCaloriesBurned, 
@@ -40,50 +53,47 @@ function HomeScreen() {
     isReady,
     checkForNewDay,
     addCoinsFromSteps
-  } = useStats();  
+  } = useStats();
+  
+  // Podaci o cvijeću
   const [activeFlower, setActiveFlower] = useState(null);
   const [growthProgress, setGrowthProgress] = useState(0);
   const [grownFlowers, setGrownFlowers] = useState([]);
-  const [dimensions, setDimensions] = useState({screen: Dimensions.get('window')});
-  const prevStepCount = React.useRef(0);
 
-
-  // Move this function definition to the top of your component
+  // --- UČITAVANJE PODATAKA I INICIJALIZACIJA ---
+  
+  /**
+   * Učitavanje korisničkog imena i težine iz pohrane
+   * Preusmjerava na prijavu ako korisničko ime nije postavljeno
+   */
   const loadUserInfo = async () => {
     try {
       const name = await AsyncStorage.getItem('userName');
       const storedWeight = await AsyncStorage.getItem('weight');
       
       if (!name) {
-        console.log('No user name found, redirecting to login');
         navigation.navigate('Login');
         return;
       }
       
       setUserName(name);
       if (storedWeight) setWeight(parseFloat(storedWeight));
-      
-      console.log('User info loaded:', { name, weight: storedWeight });
     } catch (error) {
-      console.error('Error loading user info:', error);
+      console.error('Greška pri učitavanju korisničkih podataka:', error);
     }
   };
   
-  // Then update your existing useEffect to use this function
-  useEffect(() => {
-    loadUserInfo();
-  }, []);
-
-  // Modify the loadGardenData function in HomeScreen.js
-  
+  /**
+   * Učitavanje podataka o aktivnom cvijetu, napretku rasta
+   * i uzgojenim cvjetovima
+   */
   const loadGardenData = async () => {
     try {
-      console.log('Loading garden data in Home screen');
       const storedActiveFlower = await AsyncStorage.getItem('activeFlower');
       const storedFlowerProgress = await AsyncStorage.getItem('flowerProgressMap');
       const storedGrownFlowers = await AsyncStorage.getItem('grownFlowers');
       
-      // Parse the flower progress map
+      // Učitaj mapu napretka i uzgojene cvjetove
       let progressMap = {};
       if (storedFlowerProgress) {
         progressMap = JSON.parse(storedFlowerProgress);
@@ -93,126 +103,70 @@ function HomeScreen() {
         setGrownFlowers(JSON.parse(storedGrownFlowers));
       }
       
-      // Load active flower and its specific progress
+      // Učitaj aktivni cvijet ako postoji
       if (storedActiveFlower && storedActiveFlower !== 'null') {
         const flower = JSON.parse(storedActiveFlower);
         setActiveFlower(flower);
         
-        // Get the specific progress for this flower using its instanceId
+        // Postavi napredak za taj cvijet
         if (flower.instanceId && progressMap[flower.instanceId] !== undefined) {
           setGrowthProgress(progressMap[flower.instanceId]);
-          console.log(`Loaded progress for ${flower.name}: ${progressMap[flower.instanceId]} steps`);
         } else {
-          // Default to 0 if no progress is saved for this flower
           setGrowthProgress(0);
-          console.log(`No progress found for ${flower.name}, defaulting to 0`);
         }
-        
-        console.log('Loaded active flower:', flower.name, 
-          flower.instanceId ? `(Instance: ${flower.instanceNumber})` : '');
       } else {
-        console.log('No active flower found in storage');
         setActiveFlower(null);
         setGrowthProgress(0);
       }
     } catch (error) {
-      console.error('Error loading garden data:', error);
+      console.error('Greška pri učitavanju podataka o vrtu:', error);
       setActiveFlower(null);
     }
   };
-
+  
+  // Inicijalno učitavanje podataka
   useEffect(() => {
+    loadUserInfo();
     loadGardenData();
   }, []);
 
-    useFocusEffect(
-    React.useCallback(() => {
-      const reloadData = async () => {
-        console.log('Home screen focused, reloading garden data');
-        await loadGardenData();
-      };
-      
-      reloadData();
-      return () => {}; // cleanup function
-    }, [])
-  );
-
-    // Add this inside your HomeScreen function, after other useFocusEffect hooks
+  // Osvježavanje podataka kada se zaslon fokusira
   useFocusEffect(
     React.useCallback(() => {
-      const loadUserInfo = async () => {
+      loadGardenData();
+      
+      const refreshUserData = async () => {
         try {
           const name = await AsyncStorage.getItem('userName');
-          // Remove this line:
-          // const storedStepGoal = await AsyncStorage.getItem('stepGoal');
           const storedWeight = await AsyncStorage.getItem('weight');
           
           if (name) setUserName(name);
-          // Remove this line:
-          // if (storedStepGoal) setStepGoal(parseInt(storedStepGoal, 10));
           if (storedWeight) setWeight(parseFloat(storedWeight));
-          
-          console.log('Refreshed user profile data in HomeScreen');
         } catch (error) {
-          console.error('Error refreshing user info:', error);
+          console.error('Greška pri osvježavanju korisničkih podataka:', error);
         }
       };
       
-      loadUserInfo();
+      refreshUserData();
       return () => {};
     }, [])
   );
   
-useEffect(() => {
-  if (!activeFlower) return;
-
-  const updateFlowerGrowth = async () => {
-    try {
-      const lastTracked = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
-
-      if (stepCount > lastTracked) {
-        const stepsSince = stepCount - lastTracked;
-        const newProgress = growthProgress + stepsSince;
-
-        setGrowthProgress(newProgress);
-
-        const storedMap = await AsyncStorage.getItem('flowerProgressMap');
-        const map = storedMap ? JSON.parse(storedMap) : {};
-
-        if (activeFlower.instanceId) {
-          map[activeFlower.instanceId] = newProgress;
-          await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(map));
-        }
-
-        await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
-
-        if (newProgress >= activeFlower.stepsToGrow) {
-          console.log('Flower fully grown!');
-        }
-      }
-    } catch (error) {
-      console.error('Error updating flower growth:', error);
-    }
-  };
-
-  updateFlowerGrowth();
-}, [stepCount]);
-
-  // Initialize pedometer only once StatsContext is ready
+  // --- PEDOMETAR I PRAĆENJE KORAKA ---
+  
+  /**
+   * Inicijalizacija pedometra nakon učitavanja statistike
+   */
   useEffect(() => {
-    if (!isReady) {
-      console.log('Waiting for stats to be ready before initializing pedometer...');
-      return;
-    }
+    if (!isReady) return;
     
-    console.log('Stats ready, initializing pedometer with step count:', stepCount);
     const setupPedometer = async () => {
       try {
         await PedometerService.initializeDevice();
         PedometerService.subscribe(handleStepDetected, stepCount);
         registerBackgroundTask();
       } catch (error) {
-        console.error('Error initializing pedometer:', error);
+        console.error('Greška pri inicijalizaciji pedometra:', error);
       }
     };
     
@@ -223,25 +177,87 @@ useEffect(() => {
     };
   }, [isReady, stepCount]);
 
-const handleStepDetected = () => {
-  const prev = stepCount;
-  const updated = stepCount + 1;
+  /**
+   * Obrada detektiranih koraka - povećava broj koraka
+   * i dodaje novčiće ako je potrebno
+   */
+  const handleStepDetected = () => {
+    const prev = stepCount;
+    const updated = stepCount + 1;
 
-  updateStepCount(updated);     
-  addCoinsFromSteps(updated, prev); 
-};
+    updateStepCount(updated);     
+    addCoinsFromSteps(updated, prev); 
+  };
+  
+  // --- AŽURIRANJE NAPRETKA CVIJETA ---
+  
+  /**
+   * Ažuriranje napretka rasta cvijeta kada se promijeni broj koraka
+   */
+  useEffect(() => {
+    if (!activeFlower) return;
 
+    const updateFlowerGrowth = async () => {
+      try {
+        const lastTracked = parseInt(await AsyncStorage.getItem('lastTrackedStepCount') || '0', 10);
 
+        if (stepCount > lastTracked) {
+          // Izračunaj nove korake od zadnjeg ažuriranja
+          const stepsSince = stepCount - lastTracked;
+          const newProgress = growthProgress + stepsSince;
 
-    // Add this after your other useEffect hooks
+          // Ažuriraj stanje i pohranu
+          setGrowthProgress(newProgress);
+          
+          const storedMap = await AsyncStorage.getItem('flowerProgressMap');
+          const map = storedMap ? JSON.parse(storedMap) : {};
+
+          if (activeFlower.instanceId) {
+            map[activeFlower.instanceId] = newProgress;
+            await AsyncStorage.setItem('flowerProgressMap', JSON.stringify(map));
+          }
+
+          await AsyncStorage.setItem('lastTrackedStepCount', stepCount.toString());
+        }
+      } catch (error) {
+        console.error('Greška pri ažuriranju rasta cvijeta:', error);
+      }
+    };
+
+    updateFlowerGrowth();
+  }, [stepCount]);
+
+  // --- AŽURIRANJE STATISTIKE ---
+  
+  /**
+   * Ažuriranje potrošenih kalorija na temelju koraka i težine
+   */
+  useEffect(() => {
+    const newCaloriesBurned = PedometerService.calculateCaloriesBurned(stepCount, weight);
+    setCaloriesBurned(newCaloriesBurned);
+    prevStepCount.current = stepCount;
+  }, [stepCount, weight]);
+
+  /**
+   * Ažuriranje prijeđene udaljenosti na temelju koraka
+   */
+  useEffect(() => {
+    const newDistance = (stepCount * STEP_LENGTH) / 1000;
+    if (Math.abs(newDistance - distance) > 0.01) {
+      setDistance(newDistance);
+    }
+  }, [stepCount]);
+
+  // --- PERIODIČKO OSVJEŽAVANJE I PRAĆENJE STANJA APLIKACIJE ---
+  
+  /**
+   * Periodičko osvježavanje podataka o vrtu i korisničkim postavkama
+   */
   useEffect(() => {
     const refreshInterval = setInterval(() => {
-      // Reload garden data to check for changes from other screens
       loadGardenData();
       
-      // Also check for updated weight that may affect calculations
       const checkProfileUpdates = async () => {
-        
         const storedWeight = await AsyncStorage.getItem('weight');
         if (storedWeight) {
           const parsedWeight = parseFloat(storedWeight);
@@ -255,30 +271,30 @@ const handleStepDetected = () => {
     return () => clearInterval(refreshInterval);
   }, []);
   
+  /**
+   * Praćenje stanja aplikacije (aktivna/pozadina) i osvježavanje podataka
+   */
   useEffect(() => {
     const handleAppStateChange = async (nextAppState) => {
       const prevState = appState;
       setAppState(nextAppState);
       
       if (prevState === 'background' && nextAppState === 'active') {
-        console.log('App came to foreground, checking for day change');
-        // Check for day change and reset step tracking if needed
+        // Provjera je li nastupio novi dan
         const dayChanged = await checkForNewDay();
         
         if (dayChanged) {
-          console.log('Day changed, resetting pedometer tracking');
-          // Unsubscribe and resubscribe to reset the pedometer
+          // Resetiranje pedometra za novi dan
           PedometerService.unsubscribe();
           PedometerService.resetTracking(0);
           PedometerService.subscribe(handleStepDetected, 0);
         }
         
-        // Also check for flowers that need updates
+        // Ažuriranje podataka o cvijetu
         loadGardenData();
       }
     };
     
-    // Set up app state listener
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     
     return () => {
@@ -286,68 +302,25 @@ const handleStepDetected = () => {
     };
   }, [appState]);
 
-useEffect(() => {
-  const newCalories = PedometerService.calculateCaloriesBurned(stepCount, weight);
-  setCaloriesBurned(newCalories);
-}, [stepCount, weight]);
-
-
-useEffect(() => {
-  // Update calories based on all steps
-  const newCaloriesBurned = PedometerService.calculateCaloriesBurned(stepCount, weight);
-  setCaloriesBurned(newCaloriesBurned);
+  // --- POMOĆNE FUNKCIJE ZA PRIKAZ ---
   
-  // Update the ref value here
-  prevStepCount.current = stepCount;
-}, [stepCount, weight]);
-
-useEffect(() => {
-  const newDistance = (stepCount * STEP_LENGTH) / 1000;
-  if (Math.abs(newDistance - distance) > 0.01) {
-    setDistance(newDistance);
-  }
-}, [stepCount]);
-
-
-useEffect(() => {
-  const handleStepCountChange = async () => {
-    try {
-      const lastCoinStepCount = parseInt(await AsyncStorage.getItem('lastCoinStepCount') || '0', 10);
-
-      if (stepCount > lastCoinStepCount) {
-        const additionalSteps = stepCount - lastCoinStepCount;
-        const newCoins = Math.floor(additionalSteps / 100);
-
-        if (newCoins > 0) {
-          setCoins(prevCoins => {
-            const updated = prevCoins + newCoins;
-            AsyncStorage.setItem('coins', updated.toString());
-            return updated;
-          });
-
-          await AsyncStorage.setItem('lastCoinStepCount', stepCount.toString());
-        }
-      }
-    } catch (error) {
-      console.error('Error updating coins from steps:', error);
-    }
-  };
-
-  handleStepCountChange();
-}, [stepCount]);
-
-
+  /**
+   * Izračun postotka ostvarenja dnevnog cilja koraka
+   */
   const percentage = Math.min(((stepCount / stepGoal) * 100).toFixed(0), 100);
 
+  /**
+   * Formatiranje brojeva za prikaz s tisućama
+   */
   const formatNumber = (number) => {
     return new Intl.NumberFormat().format(number);
   };
 
-  // Rest of your render code remains the same
+  // --- PRIKAZ ZASLONA ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Your existing UI code */}
+        {/* Header sekcija - pozdrav i novčići */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Hello, {userName || 'User'}!</Text>
@@ -362,7 +335,7 @@ useEffect(() => {
           </View>
         </View>
 
-        {/* Steps Card */}
+        {/* Kartica za prikaz koraka i napretka */}
         <View style={styles.stepsCard}>
           <View style={styles.stepsLeftColumn}>
             <View style={styles.stepsHeader}>
@@ -385,7 +358,7 @@ useEffect(() => {
           </View>
         </View>
 
-        {/* Other cards remain the same */}
+        {/* Kartice za kalorije i udaljenost */}
         <View style={styles.otherCards}>
           <View style={[styles.card, styles.card01]}>
             <View style={styles.cardIcon}>
@@ -394,7 +367,7 @@ useEffect(() => {
             <View style={styles.cardContent}>
               <Text style={styles.cardTitle}>Calories</Text>
               <Text style={styles.cardValue}>
-                <Text style={styles.cardValueBold}>{Math.round(caloriesBurned)}</Text> cal
+                <Text style={styles.cardValueBold}>{Math.round(caloriesBurned)}</Text> kcal
               </Text>
             </View>
           </View>
@@ -412,11 +385,11 @@ useEffect(() => {
           </View>
         </View>
 
-        {/* Flower progress */}
+        {/* Kartica za napredak rasta cvijeta */}
         <View style={[styles.flowerCard, { height: dimensions.screen.height * 0.25 }]}>
           <View style={styles.flowerContent}>
             <Text style={styles.flowerTitle}>
-              Flower progress
+              Flower Progress
             </Text>
             <View style={styles.flowerProgress}>
               {activeFlower ? (
@@ -438,7 +411,7 @@ useEffect(() => {
               ) : (
                 <View>
                   <Text style={styles.noFlowerText}>
-                    No active flower yet. Visit the shop to buy your first flower!
+                    You don't have an active flower. Visit the shop to buy your first flower!
                   </Text>
                 </View>
               )}
@@ -474,7 +447,7 @@ useEffect(() => {
   );
 }
 
-// Styles remain unchanged
+// --- STILOVI ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
